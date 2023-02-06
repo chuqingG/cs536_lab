@@ -51,6 +51,12 @@ int main(int argc, char const* argv[])
 			perror("accept");
 			exit(EXIT_FAILURE);
 		}
+		struct sockaddr_in cli_addr;
+		int len = sizeof(cli_addr);
+		if(!getpeername(new_socket, (struct sockaddr *)&cli_addr, &len)){
+			printf( "ip：%s ", inet_ntoa(cli_addr.sin_addr));
+			printf( "port：%d ", ntohs(cli_addr.sin_port));
+		}
 		char sentence[1024] = { 0 };
 		valread = read(new_socket, sentence, 1024);
 		printf("Recevied sentence:\n");

@@ -86,7 +86,7 @@ void *handle_connection(client_t *cli){
 
 	// send reponse
 	printf("%s\n", response_msg);
-	send(cli->fd, response_msg, strlen(response_msg), 0);
+	// send(cli->fd, response_msg, strlen(response_msg), 0);
 
 	while(send(cli->fd, response_msg, 1, 0) >= 0){
 		// polling for closing connection
@@ -97,7 +97,7 @@ void *handle_connection(client_t *cli){
 	pthread_mutex_lock(&clients_mutex);
 	close(cli->fd);
 	pthread_mutex_lock(&clients_mutex);
-	// Dequeue(cli->uid);
+	Dequeue(cli->uid);
     pthread_detach(pthread_self());
 	free(cli);
 	free(addr_buf);
@@ -154,9 +154,9 @@ int main(int argc, char const* argv[])
 		cli->address = address;
 		cli->fd = new_socket;
 		cli->uid = uid++;
-		// int cli_idx = Inqueue(cli);
+		int cli_idx = Inqueue(cli);
 		pthread_create(&tid, NULL, handle_connection, cli);
-		sleep(1);
+		// sleep(1);
 		
 	}
 	// closing the listening socket

@@ -45,7 +45,6 @@ int main(int argc, char const* argv[])
 	char sentence[256];
 	strcpy(sentence, argv[3]); //message
 	send(sock, argv[3], strlen(argv[3]), 0);
-	printf("Modified sentence received from server:\n");
 	int valread = read(sock, receive_msg, 1024);
 	printf("%s\n", receive_msg);
 	

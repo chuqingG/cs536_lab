@@ -8,6 +8,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <signal.h>
+#include <sys/types.h>
 #define MAX 32
 #define PORT 12000
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -22,6 +24,7 @@ typedef struct{
 } client_t;
 client_t *clients[MAX];
 
+// maybe useless...
 int Inqueue(client_t *cl){
 	pthread_mutex_lock(&clients_mutex);
 	int i;
@@ -85,19 +88,16 @@ void *handle_connection(client_t *cli){
 	printf("%s\n", response_msg);
 	send(cli->fd, response_msg, strlen(response_msg), 0);
 
-	printf("my uid is %d, fd is %d\n", cli->uid, cli->fd);
 	while(send(cli->fd, response_msg, 1, 0) >= 0){
-		//polling for closing connection
-		if(getpeername(cli->fd, (struct sockaddr *)&cli_addr, &len)){
-			printf("fail\n");
-		}
-		sleep(1);
+		// polling for closing connection
 	}
 	// closing the connected socket
 	printf("close-client:%s,%s\n", addr_buf, port_buf);
+	
+	pthread_mutex_lock(&clients_mutex);
 	close(cli->fd);
-	// Dequeue(cli->uid);
-	// cli_count--;
+	pthread_mutex_lock(&clients_mutex);
+	Dequeue(cli->uid);
     pthread_detach(pthread_self());
 	free(cli);
 	free(addr_buf);
@@ -121,8 +121,7 @@ int main(int argc, char const* argv[])
 	}
 
 	// Forcefully attaching socket to the port 12000
-	if (setsockopt(server_fd, SOL_SOCKET,
-				SO_REUSEADDR, &opt,
+	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
 				sizeof(opt))) {
 		perror("setsockopt");
 		exit(EXIT_FAILURE);
@@ -156,7 +155,7 @@ int main(int argc, char const* argv[])
 		cli->fd = new_socket;
 		cli->uid = uid++;
 		int cli_idx = Inqueue(cli);
-		pthread_create(&tid, NULL, &handle_connection, cli);
+		pthread_create(&tid, NULL, handle_connection, cli);
 		// sleep(1);
 		
 	}

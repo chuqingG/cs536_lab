@@ -88,6 +88,10 @@ void *handle_connection(client_t *cli){
 	printf("my uid is %d, fd is %d\n", cli->uid, cli->fd);
 	while(send(cli->fd, response_msg, 1, 0) >= 0){
 		//polling for closing connection
+		if(getpeername(cli->fd, (struct sockaddr *)&cli_addr, &len)){
+			printf("fail\n");
+		}
+		sleep(1);
 	}
 	// closing the connected socket
 	printf("close-client:%s,%s\n", addr_buf, port_buf);
@@ -153,7 +157,7 @@ int main(int argc, char const* argv[])
 		cli->uid = uid++;
 		int cli_idx = Inqueue(cli);
 		pthread_create(&tid, NULL, &handle_connection, cli);
-		sleep(1);
+		// sleep(1);
 		
 	}
 	// closing the listening socket

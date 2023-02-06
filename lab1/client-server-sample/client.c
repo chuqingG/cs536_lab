@@ -10,12 +10,12 @@
 
 int main(int argc, char const* argv[])
 {
-	int sock = 0, valread, client_fd;
+	int sock = 0, client_fd;
 	struct sockaddr_in serv_addr;
 	// printf("Input lowercase sentence:\n");
 	// char sentence[256];
 	// fgets(sentence, sizeof(sentence), stdin);
-	char modifiedSentence[1024] = { 0 };
+	char receive_msg[1024] = { 0 };
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
 		return -1;
@@ -41,15 +41,16 @@ int main(int argc, char const* argv[])
 		printf("\nConnection Failed \n");
 		return -1;
 	}
+
 	char sentence[256];
-	int idx;
 	strcpy(sentence, argv[3]); //message
 	send(sock, argv[3], strlen(argv[3]), 0);
 	printf("Modified sentence received from server:\n");
-	valread = read(sock, modifiedSentence, 1024);
-	printf("%s\n", modifiedSentence);
-	sleep(5);
+	int valread = read(sock, receive_msg, 1024);
+	printf("%s\n", receive_msg);
+	
 	// closing the connected socket
+	sleep(10);
 	close(client_fd);
 	return 0;
 }

@@ -30,7 +30,7 @@ int main(int argc, char const* argv[])
 	}
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(atoi(argv[2]));
+	address.sin_port = htons(atoi(argv[1]));
 
 	// Forcefully attaching socket to the port 12000
 	if (bind(server_fd, (struct sockaddr*)&address,

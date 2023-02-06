@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <stdlib.h>
 #define PORT 12000
 
 int main(int argc, char const* argv[])
@@ -40,7 +41,7 @@ int main(int argc, char const* argv[])
 		printf("\nConnection Failed \n");
 		return -1;
 	}
-	send(sock, sentence, strlen(sentence), 0);
+	send(sock, argv[3], strlen(argv[3]), 0);
 	printf("Modified sentence received from server:\n");
 	valread = read(sock, modifiedSentence, 1024);
 	printf("%s\n", modifiedSentence);

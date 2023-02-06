@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <ctype.h>
+
 #define PORT 12000
 int main(int argc, char const* argv[])
 {
@@ -51,29 +52,51 @@ int main(int argc, char const* argv[])
 			perror("accept");
 			exit(EXIT_FAILURE);
 		}
+
+		// Get client information from socket 
 		struct sockaddr_in cli_addr;
 		int len = sizeof(cli_addr);
-		if(!getpeername(new_socket, (struct sockaddr *)&cli_addr, &len)){
-			printf( "ip：%s ", inet_ntoa(cli_addr.sin_addr));
-			printf( "port：%d ", ntohs(cli_addr.sin_port));
+		if(getpeername(new_socket, (struct sockaddr *)&cli_addr, &len)){
+			perror("get client information");
+			exit(EXIT_FAILURE);
 		}
-		char sentence[1024] = { 0 };
-		valread = read(new_socket, sentence, 1024);
-		printf("Recevied sentence:\n");
-		printf("%s\n", sentence);
-		char modifiedSentence[1024] = { 0 };
-		int j = 0;
-		char ch;
-		while (sentence[j]){
-			ch = sentence[j];
-			modifiedSentence[j] = toupper(ch);
-			j++;
-		}
-		printf("Modified sentence:\n");
-		printf("%s\n", modifiedSentence);
-		send(new_socket, modifiedSentence, strlen(modifiedSentence), 0);
+		char *addr_buf = malloc(INET6_ADDRSTRLEN);
+		char *port_buf = malloc(10);
+        memset(addr_buf, 0, INET6_ADDRSTRLEN);
+		memset(port_buf, 0, 10);
+    
+        if((inet_ntop(cli_addr.sin_family, &cli_addr.sin_addr, addr_buf, INET6_ADDRSTRLEN)) == NULL){
+        	fprintf(stderr,"convert client information failed, fd=%d\n", new_socket);        
+        	exit(EXIT_FAILURE);
+        }
+		// printf( "ip：%s\n", addr_buf);
+		sprintf(port_buf, "%d", (int)ntohs(cli_addr.sin_port));
+		// itoa((int)ntohs(cli_addr.sin_port), port_buf, 10);
+		// printf( "port：%s\n", port_buf);
+		
+		char header[30] = "message-from-client:";
+		char cli_msg[1024] = { 0 };
+		char response_msg[1024] = { 0 };
+		int idx = strlen(header) + strlen(addr_buf) + strlen(port_buf) + 2; // for , and \n
 
+		valread = read(new_socket, cli_msg, 1024);
+
+		//build the response message
+		memcpy(response_msg, header, strlen(header) * sizeof(char));
+		memcpy(response_msg + strlen(header), addr_buf, strlen(addr_buf) * sizeof(char));
+		memcpy(response_msg + strlen(header) + strlen(addr_buf) + 1, port_buf, strlen(port_buf) * sizeof(char));
+		response_msg[strlen(header) + strlen(addr_buf)] = ',';
+		response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
+		memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
+
+		printf("%s\n", response_msg);
+		send(new_socket, response_msg, strlen(response_msg), 0);
+		
+		while(send(new_socket, response_msg, 1, 0) >= 0){
+			//polling
+		}
 		// closing the connected socket
+		printf("close-client:%s,%s\n", addr_buf, port_buf);
 		close(new_socket);
 	}
 	// closing the listening socket

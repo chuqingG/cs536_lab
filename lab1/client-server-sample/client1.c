@@ -27,7 +27,6 @@ void arg_parser(char* url, char* port_str, char* addr, char* path){
 	} else if (status == 0){
         strncpy(addr, url + ip_pm.rm_so, ip_pm.rm_eo - ip_pm.rm_so);
         addr[ip_pm.rm_eo - ip_pm.rm_so] = '\0';
-		printf("%s\n", addr);
 	}
 
 	status = regexec(&port_reg, url, nmatch, &port_pm, 0);
@@ -37,10 +36,8 @@ void arg_parser(char* url, char* port_str, char* addr, char* path){
 	} else if (status == 0){
         strncpy(port_str, url + port_pm.rm_so + 1, port_pm.rm_eo - port_pm.rm_so - 1);
         port_str[port_pm.rm_eo - port_pm.rm_so - 1] = '\0';
-		printf("%s\n", port_str);
 	}
 	strcpy(path, url + port_pm.rm_eo);
-	printf("%s\n", path);
 	regfree(&ip_reg);
 	regfree(&port_reg);
 	return;
@@ -53,6 +50,7 @@ void send_get(int fd, char* path, char* ip){
 						"GET %s HTTP/1.1\r\n"
 						"Host: %s\r\n\r\n", path, ip);
 	send(fd, send_buf, send_len, 0);
+	printf("Send request:\n%s", send_buf);
 }
 
 int main(int argc, char const* argv[])
@@ -63,9 +61,7 @@ int main(int argc, char const* argv[])
 	arg_parser(argv[1], port, ipaddr, path);
 	int sock = 0, client_fd;
 	struct sockaddr_in serv_addr;
-	// printf("Input lowercase sentence:\n");
-	// char sentence[256];
-	// fgets(sentence, sizeof(sentence), stdin);
+
 	char receive_msg[1024] = { 0 };
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
@@ -93,9 +89,6 @@ int main(int argc, char const* argv[])
 		return -1;
 	}
 
-	// char sentence[256];
-	// strcpy(sentence, argv[3]); //message
-	// send(sock, argv[3], strlen(argv[3]), 0);
 	send_get(sock, path, ipaddr);
 	int valread = read(sock, receive_msg, 1024);
 	printf("%s\n", receive_msg);

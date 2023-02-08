@@ -9,7 +9,7 @@
 #include <regex.h>
 #define PORT 12000
 
-void arg_parser(char* url, char* port_str, char* addr, char* path){
+void arg_parser(const char* url, char* port_str, char* addr, char* path){
 	int status;
 	int cflags = REG_EXTENDED | REG_NEWLINE;
 	regmatch_t ip_pm, port_pm;

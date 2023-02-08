@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #define MAX 32
 #define PORT 12000
+#define HTTP2
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 static _Atomic unsigned int cli_count = 0;
 static int uid = 10;
@@ -171,8 +172,57 @@ int min_(int x, int y){
 		return y;
 }
 
-int send_big_picture(int fd){
-	FILE *f = fopen("www/bigpicture.jpeg", "rb");
+int send_picture_chunked(int fd, const char* path){
+	FILE *f = fopen(path, "rb");
+	if (f == NULL){
+		perror("open file");
+		exit(EXIT_FAILURE);
+	}
+	fseek(f, 0, SEEK_END);
+	int length = ftell(f);
+	if (length <= 0){
+		perror("seek end");
+		exit(EXIT_FAILURE);
+	}
+	rewind(f);
+
+
+	// send head 
+	char *head_buf = (char *)malloc(length + 1024);
+#ifndef HTTP2
+	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
+							"Content-Type: image/jpeg\r\n"
+							"Accept-Ranges:bytes\r\n\r\n");
+#else 
+	int head_len = sprintf(head_buf, "HTTP/2.0 200 OK\r\n"
+							"Content-Type: image/jpeg\r\n"
+							"Accept-Ranges:bytes\r\n\r\n");
+#endif
+	send(fd, head_buf, head_len, 0);	
+
+	// send chunked body
+	int seg_len = 40 * 1024;
+	char read_buf[40 * 1024 + 100] = {0};
+	// printf("frame count:%d", (int)length / seg_len);
+	for (int i = 0; i < length; i += seg_len){
+		int size = min_(seg_len, length - i);
+#ifndef HTTP2
+		size = fread(read_buf, 1, size, f);
+		send(fd, read_buf, size, 0);
+#else	
+		int head_len = sprintf(read_buf, 
+						"Object-Frame: %s Frame_%d\n", path + 3, i); //rm www
+		// size = fread(read_buf + head_len, 1, size, f);
+		// send(fd, read_buf, size, 0);
+		send(fd, read_buf, head_len, 0);
+#endif
+	}
+	free(head_buf);
+	fclose(f);
+}
+
+int send_video_chunked(int fd, const char* path){
+	FILE *f = fopen(path, "rb");
 	if (f == NULL){
 		perror("open file");
 		exit(EXIT_FAILURE);
@@ -187,19 +237,33 @@ int send_big_picture(int fd){
 
 	// send head 
 	char *head_buf = (char *)malloc(length + 1024);
+#ifndef HTTP2
 	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
-							"Content-Type: image/jpeg\r\n"
+							"Content-Type: video/mp4\r\n"
 							"Accept-Ranges:bytes\r\n\r\n");
+#else 
+	int head_len = sprintf(head_buf, "HTTP/2.0 200 OK\r\n"
+							"Content-Type: video/mp4\r\n"
+							"Accept-Ranges:bytes\r\n\r\n");
+#endif
 	send(fd, head_buf, head_len, 0);	
 
 	// send chunked body
-	int seg_len = 102400;
-	char read_buf[102400 + 100] = {0};
+	int seg_len = 40 * 1024;
+	char read_buf[40 * 1024 + 100] = {0};
 	// printf("frame count:%d", (int)length / seg_len);
 	for (int i = 0; i < length; i += seg_len){
 		int size = min_(seg_len, length - i);
+#ifndef HTTP2
 		size = fread(read_buf, 1, size, f);
 		send(fd, read_buf, size, 0);
+#else	
+		int head_len = sprintf(read_buf, 
+						"Object-Frame: %s Frame_%d\n", path + 3, i); //rm www
+		// size = fread(read_buf + head_len, 1, size, f);
+		// send(fd, read_buf, size, 0);
+		send(fd, read_buf, head_len, 0);
+#endif
 	}
 	free(head_buf);
 	fclose(f);
@@ -316,9 +380,15 @@ void get_request_parser(char *request, int fd){
 	} else if (!strcmp(rel_path, "/bigpicture.html") || !strcmp(rel_path, "/www/bigpicture.html")){
 		send_html(fd, "www/bigpicture.html");
 	} else if (!strcmp(rel_path, "/purdue.jpeg") || !strcmp(rel_path, "/www/purdue.jpeg")){
+#ifndef HTTP2
 		send_picture(fd);
+#else
+		send_picture_chunked(fd, "www/purdue.jpeg");
+#endif
 	} else if (!strcmp(rel_path, "/bigpicture.jpeg") || !strcmp(rel_path, "/www/bigpicture.jpeg")){
-		send_big_picture(fd);
+		send_picture_chunked(fd, "www/bigpicture.jpeg");
+	} else if (!strcmp(rel_path, "/video.mp4") || !strcmp(rel_path, "/www/video.mp4")){
+		// send_video_chunked(fd, "www/video.mp4");
 	} else if (!strcmp(rel_path, "/video.html") || !strcmp(rel_path, "/www/video.html")){
 		send_html(fd, "www/video.html");
 	} else {

@@ -12,12 +12,13 @@ pthread_mutex_t requests_mutex = PTHREAD_MUTEX_INITIALIZER;
 static _Atomic unsigned int req_count = 0;
 #define PORT 12000
 #define MAX 32
+#define HTTP2
 
 typedef struct{
 	int uid;
 	char src[128];
 	char server_ip[32];
-	int fd;
+	int sock;
 } request_pack;
 request_pack *requests[MAX];
 
@@ -113,16 +114,33 @@ void arg_parser(const char* url, char* port_str, char* addr, char* path){
 	return;
 }
 
+void send_get(int fd, const char* path, const char* ip){
+    char send_buf[256] = {0};
+
+#ifndef HTTP2
+    int send_len = sprintf(send_buf,
+						"GET %s HTTP/1.1\r\n"
+						"Host: %s\r\n\r\n", path, ip);
+#else
+	int send_len = sprintf(send_buf,
+						"GET %s HTTP/2.0\r\n"
+						"Host: %s\r\n\r\n", path, ip);
+#endif
+	send(fd, send_buf, send_len, 0);
+	printf("Send request:\n%s", send_buf);
+}
+
 void handle_subrequest(request_pack* request){
 	printf("Send object %d request\n", request->uid);
-	send_get(request->fd, request->src, request->server_ip);
+	send_get(request->sock, request->src, request->server_ip);
 	// char receive_msg[1024] = { 0 };
 	// int read_len = read(request->fd, receive_msg, 1024);
 	// printf("Object %d get response:\n%-105.100s", request->uid, receive_msg);
 	return;
 }
 
-void send_resource_request_and_read_result(int fd, const char* server_ip){
+void send_resource_request_and_read_result(int sock, const char* server_port, const char* server_ip, 
+											struct sockaddr_in* serv_addr){
 	int i;
 	pthread_t tid;
 	for(i = 0; i < MAX; ++i){
@@ -130,21 +148,31 @@ void send_resource_request_and_read_result(int fd, const char* server_ip){
 			break;
 		}
 		strcpy(requests[i]->server_ip, server_ip);
-		requests[i]->fd = fd;
+
+		// //create the send socket
+		// int sock, fd;
+		// if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+		// 	printf("\n Socket creation error \n");
+		// 	return -1;
+		// }
+		// if ((fd = connect(sock, (struct sockaddr*)&serv_addr, 
+		// 				sizeof(serv_addr))) < 0) {
+		// 	printf("\nConnection Failed \n");
+		// 	return -1;
+		// }
+		requests[i]->sock = sock;
+		// handle_subrequest(requests[i]);
 		pthread_create(&tid, NULL, handle_subrequest, requests[i]);
 	}
-
-
-}
-
-void send_get(int fd, const char* path, const char* ip){
-    char send_buf[256] = {0};
- 
-    int send_len = sprintf(send_buf,
-						"GET %s HTTP/1.1\r\n"
-						"Host: %s\r\n\r\n", path, ip);
-	send(fd, send_buf, send_len, 0);
-	printf("Send request:\n%s", send_buf);
+	sleep(1);
+	char receive_msg[1024] = { 0 };
+	while(1){
+		int read_len = recv(sock, receive_msg, 1024, 0);
+		if(read_len <= 0)
+			break;
+		printf("%s", receive_msg);
+	}
+	return;
 }
 
 int main(int argc, char const* argv[])
@@ -156,7 +184,7 @@ int main(int argc, char const* argv[])
 	int sock = 0, client_fd;
 	struct sockaddr_in serv_addr;
 
-	char receive_msg[1024] = { 0 };
+	char receive_msg[2048 + 10] = { 0 };
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
 		return -1;
@@ -184,15 +212,16 @@ int main(int argc, char const* argv[])
 	}
 
 	send_get(sock, path, ipaddr);
-	int valread = read(sock, receive_msg, 1024);
-	printf("Get response:\n%s", receive_msg);
+	int valread = read(sock, receive_msg, 2048);
+	// printf("Get response:\n%s", receive_msg);
 	if(html_source_parser(receive_msg)){
 		printf("Parse html Failed \n");
 		return -1;
 	}
-	send_resource_request_and_read_result(sock, ipaddr);
+	// send_get(sock, "/purdue.jpeg", ipaddr);
+	send_resource_request_and_read_result(sock, port, ipaddr, &serv_addr);
 	// closing the connected socket
-	sleep(10);
+	sleep(60);
 	close(client_fd);
 	return 0;
 }

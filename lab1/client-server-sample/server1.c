@@ -315,6 +315,8 @@ void get_request_parser(char *request, int fd){
 		send_html(fd, "www/picture.html");
 	} else if (!strcmp(rel_path, "/bigpicture.html") || !strcmp(rel_path, "/www/bigpicture.html")){
 		send_html(fd, "www/bigpicture.html");
+	} else if (!strcmp(rel_path, "/video.html") || !strcmp(rel_path, "/www/video.html")){
+		send_html(fd, "www/video.html");
 	} else if (!strcmp(rel_path, "/purdue.jpeg") || !strcmp(rel_path, "/www/purdue.jpeg")){
 		send_picture(fd);
 	} else if (!strcmp(rel_path, "/bigpicture.jpeg") || !strcmp(rel_path, "/www/bigpicture.jpeg")){

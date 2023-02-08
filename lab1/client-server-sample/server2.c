@@ -26,7 +26,7 @@ typedef struct{
 } client_t;
 client_t *clients[MAX];
 
-int read_line(int fd,char *buf, int size){
+int recv_line(int fd,char *buf, int size){
 	//return the current idx 
 	int i = 0;
 	char ch;
@@ -37,12 +37,22 @@ int read_line(int fd,char *buf, int size){
 			if(ch == '\n') 
 				break;
 		}
-		else{
-			perror("read a char");
-			exit(EXIT_FAILURE);
-		}
+		else
+			return i;
 	}
 	return i + 1;
+}
+
+int recv_per_get(int fd, char *buf){
+	int max_line = 256;
+	int i = 0;
+	while(1){
+		int line_len = recv_line(fd, buf + i, max_line);
+		i += line_len;
+		if(line_len <= 2)
+			break;
+	}
+	return i;
 }
 
 int copy_line(char *src, char *buf){
@@ -128,43 +138,6 @@ int read_file_fixed_size(char* des, char* path){
 	return length;
 }
 
-int send_big_picture_with_head(int fd){
-	// FILE *fp;
-    char read_buf[102400 + 10] = {0}; 
-	FILE* pfile;
-	pfile = fopen("www/bigpicture.jpeg", "rb");
-	if(pfile == NULL){
-		perror("open file");
-		exit(EXIT_FAILURE);
-	}
-	int seg_len = 102400;
-
-	// send header and first part
-	seg_len = fread(read_buf, 1, seg_len, pfile);
-	char* send_buf = (char *)malloc(strlen(read_buf) + 1024);
-    if (NULL == send_buf){
-        perror("malloc buffer");
-		exit(EXIT_FAILURE);
-    }
-	int response_len = sprintf(send_buf,	"HTTP/1.1 200 OK\r\n"
-						"Connection: keep-alive\r\n"
-                        "Content-Type: image/jpeg\r\n"
-                        "Transfer-Encoding: chunked\r\n\r\n");
-
-    memcpy(send_buf + response_len, read_buf, seg_len);
-    send(fd, send_buf, response_len + seg_len, 0);
-
-	/* send the remaining data */
-	while(seg_len < 102400){
-		seg_len = fread(read_buf, 1, seg_len, pfile);
-		send(fd, read_buf, seg_len, 0);
-	}
-	// int length = read_file(readBuf, "www/bigpicture.jpeg");
-    
-    free(send_buf);
-    return 0;
-}
-
 int min_(int x, int y){
 	if (x < y)
 		return x;
@@ -186,7 +159,6 @@ int send_picture_chunked(int fd, const char* path){
 	}
 	rewind(f);
 
-
 	// send head 
 	char *head_buf = (char *)malloc(length + 1024);
 #ifndef HTTP2
@@ -203,7 +175,8 @@ int send_picture_chunked(int fd, const char* path){
 	// send chunked body
 	int seg_len = 40 * 1024;
 	char read_buf[40 * 1024 + 100] = {0};
-	// printf("frame count:%d", (int)length / seg_len);
+	int frame_count = 0;
+	printf("frame count:%d", (int)length / seg_len);
 	for (int i = 0; i < length; i += seg_len){
 		int size = min_(seg_len, length - i);
 #ifndef HTTP2
@@ -211,10 +184,11 @@ int send_picture_chunked(int fd, const char* path){
 		send(fd, read_buf, size, 0);
 #else	
 		int head_len = sprintf(read_buf, 
-						"Object-Frame: %s Frame_%d\n", path + 3, i); //rm www
+						"Object-Frame: %s Frame_%d\n", path + 3, frame_count); //rm www
 		// size = fread(read_buf + head_len, 1, size, f);
 		// send(fd, read_buf, size, 0);
 		send(fd, read_buf, head_len, 0);
+		frame_count++;
 #endif
 	}
 	free(head_buf);
@@ -418,26 +392,35 @@ void *handle_connection(client_t *cli){
 
 	//build the response message
 	char header[30] = "message-from-client:";
-	char cli_msg[1024] = { 0 };
-	char response_msg[1024] = { 0 };
+	char cli_msg[2048] = { 0 };
+	char response_msg[2048] = { 0 };
 	int idx = strlen(header) + strlen(addr_buf) + strlen(port_buf) + 2; // for , and \n
 
-	int valread = read(cli->fd, cli_msg, 1024);
+	int read_len;
 	
-	memcpy(response_msg, header, strlen(header) * sizeof(char));
-	memcpy(response_msg + strlen(header), addr_buf, strlen(addr_buf) * sizeof(char));
-	memcpy(response_msg + strlen(header) + strlen(addr_buf) + 1, port_buf, strlen(port_buf) * sizeof(char));
-	response_msg[strlen(header) + strlen(addr_buf)] = ',';
-	response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
-	memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
+	while(1){
+		read_len = recv_per_get(cli->fd, cli_msg);
+		if(read_len <= 0){
+			printf("close-client:%s,%s\n", addr_buf, port_buf);
+			break;
+		}
+		else{
+			memcpy(response_msg, header, strlen(header) * sizeof(char));
+			memcpy(response_msg + strlen(header), addr_buf, strlen(addr_buf) * sizeof(char));
+			memcpy(response_msg + strlen(header) + strlen(addr_buf) + 1, port_buf, strlen(port_buf) * sizeof(char));
+			response_msg[strlen(header) + strlen(addr_buf)] = ',';
+			response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
+			memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
 	
-	printf("%s\n", response_msg);
+			printf("%s\n", response_msg);
 
-	//If recv http request
-	if(!strncmp(cli_msg, "GET ", 4)){
-		get_request_parser(cli_msg, cli->fd);
-	}else{
-		send(cli->fd, response_msg, strlen(response_msg), 0);
+			//If recv http request
+			if(!strncmp(cli_msg, "GET ", 4)){
+				get_request_parser(cli_msg, cli->fd);
+			}else{
+				send(cli->fd, response_msg, strlen(response_msg), 0);
+			}
+		}
 	}
 	
 	// while(send(cli->fd, response_msg, 1, 0) >= 0){
@@ -446,8 +429,8 @@ void *handle_connection(client_t *cli){
 	// 	printf("sleep\n");
 	// }
 	// closing the connected socket
-	sleep(600);
-	printf("close-client:%s,%s\n", addr_buf, port_buf);
+	sleep(100);
+	// printf("close-client:%s,%s\n", addr_buf, port_buf);
 	pthread_mutex_lock(&clients_mutex);
 	
 	close(cli->fd);

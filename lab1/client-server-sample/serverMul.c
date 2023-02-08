@@ -37,7 +37,7 @@ int Inqueue(client_t *cl){
 	return i;
 }
 
-void Dequeue(){
+void Dequeue(int uid){
 	pthread_mutex_lock(&clients_mutex);
 	for(int i=0; i < MAX; ++i){
 		if(clients[i]){

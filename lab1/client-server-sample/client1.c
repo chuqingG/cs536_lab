@@ -91,7 +91,7 @@ int main(int argc, char const* argv[])
 
 	send_get(sock, path, ipaddr);
 	int valread = read(sock, receive_msg, 1024);
-	printf("%s\n", receive_msg);
+	printf("Get response:\n%s", receive_msg);
 	
 	// closing the connected socket
 	sleep(10);

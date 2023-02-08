@@ -46,6 +46,15 @@ void arg_parser(char* url, char* port_str, char* addr, char* path){
 	return;
 }
 
+void send_get(int fd, char* path, char* ip){
+    char send_buf[256] = {0};
+ 
+    int send_len = sprintf(send_buf,
+						"GET %s HTTP/1.1\r\n"
+						"Host: %s\r\n\r\n", path, ip);
+	send(fd, send_buf, send_len, 0);
+}
+
 int main(int argc, char const* argv[])
 {	
 	char ipaddr[20] = {0};
@@ -84,9 +93,10 @@ int main(int argc, char const* argv[])
 		return -1;
 	}
 
-	char sentence[256];
-	strcpy(sentence, argv[3]); //message
-	send(sock, argv[3], strlen(argv[3]), 0);
+	// char sentence[256];
+	// strcpy(sentence, argv[3]); //message
+	// send(sock, argv[3], strlen(argv[3]), 0);
+	send_get(sock, path, ipaddr);
 	int valread = read(sock, receive_msg, 1024);
 	printf("%s\n", receive_msg);
 	

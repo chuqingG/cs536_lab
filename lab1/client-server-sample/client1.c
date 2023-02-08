@@ -9,7 +9,7 @@
 #include <regex.h>
 #define PORT 12000
 
-void arg_parser(char* url, char* port_str, char* addr){
+void arg_parser(char* url, char* port_str, char* addr, char* path){
 	int status;
 	int cflags = REG_EXTENDED | REG_NEWLINE;
 	regmatch_t ip_pm, port_pm;
@@ -39,6 +39,8 @@ void arg_parser(char* url, char* port_str, char* addr){
         port_str[port_pm.rm_eo - port_pm.rm_so - 1] = '\0';
 		printf("%s\n", port_str);
 	}
+	strcpy(path, url + port_pm.rm_eo);
+	printf("%s\n", path);
 	regfree(&ip_reg);
 	regfree(&port_reg);
 	return;
@@ -48,7 +50,8 @@ int main(int argc, char const* argv[])
 {	
 	char ipaddr[20] = {0};
 	char port[10] = {0};
-	arg_parser(argv[1], port, ipaddr);
+	char path[30] = {0};
+	arg_parser(argv[1], port, ipaddr, path);
 	int sock = 0, client_fd;
 	struct sockaddr_in serv_addr;
 	// printf("Input lowercase sentence:\n");

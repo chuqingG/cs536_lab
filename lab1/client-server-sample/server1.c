@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <signal.h>
+#include <regex.h>
 #include <sys/types.h>
 #define MAX 32
 #define PORT 12000
@@ -24,30 +25,304 @@ typedef struct{
 } client_t;
 client_t *clients[MAX];
 
-// maybe useless...
-int Inqueue(client_t *cl){
-	pthread_mutex_lock(&clients_mutex);
-	int i;
-	for(i = 0; i < MAX; ++i)
-		if(!clients[i]){
-			clients[i] = cl;
-			break;
-		}
-	pthread_mutex_unlock(&clients_mutex);
-	return i;
-}
-
-void Dequeue(){
-	pthread_mutex_lock(&clients_mutex);
-	for(int i=0; i < MAX; ++i){
-		if(clients[i]){
-			if(clients[i]->uid == uid){
-				clients[i] = NULL;
+int read_line(int fd,char *buf, int size){
+	//return the current idx 
+	int i = 0;
+	char ch;
+	for(i = 0;i < size;++i){
+		int n = recv(fd, &ch, 1, 0);
+		if(n == 1){
+			buf[i] = ch;
+			if(ch == '\n') 
 				break;
-			}
+		}
+		else{
+			perror("read a char");
+			exit(EXIT_FAILURE);
 		}
 	}
-	pthread_mutex_unlock(&clients_mutex);
+	return i + 1;
+}
+
+int copy_line(char *src, char *buf){
+	//return the length of the copied line
+	int i = 0;
+	for(i = 0; src[i] != '\0'; ++i){
+		buf[i] = src[i];
+		if(src[i] == '\n') 
+			break;
+	}
+	return i + 1;
+}
+
+int get_rel_path(const char *src, char *buf){
+	//return the relative path to buf
+	int i;
+	for(i = 4; src[i] != ' '; ++i){
+		buf[i - 4] = src[i];
+		if(src[i] == '\r' || src[i] == '\n') 
+			return -1;
+		else if(src[i] == '\0'){
+			return -2;
+		}
+	}
+	return 0;
+}
+
+int read_file(char* des, char* path){
+	FILE* pfile;
+	pfile = fopen(path, "rb");
+	if(pfile == NULL){
+		perror("open file");
+		exit(EXIT_FAILURE);
+	} 
+	fseek(pfile, 0, SEEK_END);
+	int length = ftell(pfile);
+	rewind(pfile);
+	length = fread(des, 1, length, pfile);
+	des[length] = '\0';
+	fclose(pfile);
+	return length;
+}
+
+int send_picture(int fd){
+	// FILE *fp;
+    char readBuf[960*320 + 1024] = {0}; //600k
+
+	int length = read_file(readBuf, "www/purdue.jpeg");
+    
+    /* send data */
+    char* p_bufs = (char *)malloc(strlen(readBuf) + 1024);
+    if (NULL == p_bufs){
+        perror("malloc buffer");
+		exit(EXIT_FAILURE);
+    }  
+    int response_len = sprintf(p_bufs,	"HTTP/1.1 200 OK\r\n"
+						"Connection: keep-alive\r\n"
+                        "Content-Type: image/jpeg\r\n"
+                        "Content-Length: %d\r\n\r\n",
+                        length);
+
+    memcpy(p_bufs+response_len, readBuf, length);
+    response_len += length;
+    
+    send(fd, p_bufs, response_len, 0);
+    free(p_bufs);
+    return 0;
+}
+
+int read_file_fixed_size(char* des, char* path){
+	FILE* pfile;
+	pfile = fopen(path, "rb");
+	if(pfile == NULL){
+		perror("open file");
+		exit(EXIT_FAILURE);
+	} 
+	fseek(pfile, 0, SEEK_END);
+	int length = ftell(pfile);
+	rewind(pfile);
+	length = fread(des, 1, length, pfile);
+	des[length] = '\0';
+	fclose(pfile);
+	return length;
+}
+
+int send_big_picture_with_head(int fd){
+	// FILE *fp;
+    char read_buf[102400 + 10] = {0}; 
+	FILE* pfile;
+	pfile = fopen("www/bigpicture.jpeg", "rb");
+	if(pfile == NULL){
+		perror("open file");
+		exit(EXIT_FAILURE);
+	}
+	int seg_len = 102400;
+
+	// send header and first part
+	seg_len = fread(read_buf, 1, seg_len, pfile);
+	char* send_buf = (char *)malloc(strlen(read_buf) + 1024);
+    if (NULL == send_buf){
+        perror("malloc buffer");
+		exit(EXIT_FAILURE);
+    }
+	int response_len = sprintf(send_buf,	"HTTP/1.1 200 OK\r\n"
+						"Connection: keep-alive\r\n"
+                        "Content-Type: image/jpeg\r\n"
+                        "Transfer-Encoding: chunked\r\n\r\n");
+
+    memcpy(send_buf + response_len, read_buf, seg_len);
+    send(fd, send_buf, response_len + seg_len, 0);
+
+	/* send the remaining data */
+	while(seg_len < 102400){
+		seg_len = fread(read_buf, 1, seg_len, pfile);
+		send(fd, read_buf, seg_len, 0);
+	}
+	// int length = read_file(readBuf, "www/bigpicture.jpeg");
+    
+    free(send_buf);
+    return 0;
+}
+
+int min_(int x, int y){
+	if (x < y)
+		return x;
+	else	
+		return y;
+}
+
+int send_big_picture(int fd){
+	FILE *f = fopen("www/bigpicture.jpeg", "rb");
+	if (f == NULL){
+		perror("open file");
+		exit(EXIT_FAILURE);
+	}
+	fseek(f, 0, SEEK_END);
+	int length = ftell(f);
+	if (length <= 0){
+		perror("seek end");
+		exit(EXIT_FAILURE);
+	}
+	rewind(f);
+
+	// send head 
+	char *head_buf = (char *)malloc(length + 1024);
+	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
+							"Content-Type: image/jpeg\r\n"
+							"Accept-Ranges:bytes\r\n\r\n");
+	send(fd, head_buf, head_len, 0);	
+
+	// send chunked body
+	int seg_len = 102400;
+	char read_buf[102400 + 100] = {0};
+	// printf("frame count:%d", (int)length / seg_len);
+	for (int i = 0; i < length; i += seg_len){
+		int size = min_(seg_len, length - i);
+		size = fread(read_buf, 1, size, f);
+		send(fd, read_buf, size, 0);
+	}
+	free(head_buf);
+	fclose(f);
+}
+
+int send_html(int fd, char* path){
+    char file_buf[1024] = {0}; 
+	int length = read_file(file_buf, path);
+    
+    char* response_buf = (char *)malloc(strlen(file_buf) + 1024);
+    if (NULL == response_buf){
+        perror("malloc buffer");
+		exit(EXIT_FAILURE);
+    }  
+    int response_len = sprintf(response_buf,
+						"HTTP/1.1 200 OK\r\n"
+						"Connection: keep-alive\r\n"
+                        "Content-Type: text/html\r\n"
+                        "Content-Length: %d\r\n\r\n",
+                        length);
+
+    memcpy(response_buf + response_len, file_buf, length);
+    send(fd, response_buf, response_len + length, 0);
+    free(response_buf);
+    return 0;
+}
+
+int send_404(int fd){
+
+    char* response_buf = (char *)malloc(1024);
+      
+    int response_len = sprintf(response_buf,
+						"HTTP/1.1 404 Not Found\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>404 Not Found</h1>"
+						"<p>The requested URL was not found on this server.</p></body></html>");
+
+    send(fd, response_buf, response_len, 0);
+    free(response_buf);
+    return 0;
+}
+
+int send_400(int fd){
+
+    char* response_buf = (char *)malloc(1024);
+      
+    int response_len = sprintf(response_buf,
+						"HTTP/1.1 400 Bad Request\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>400 Bad Request</h1>"
+						"<p>Please check the syntax of your request.</p></body></html>");
+
+    send(fd, response_buf, response_len, 0);
+    free(response_buf);
+    return 0;
+}
+
+int send_505(int fd){
+
+    char* response_buf = (char *)malloc(1024);
+      
+    int response_len = sprintf(response_buf,
+						"HTTP/1.1 505 HTTP Version Not Supported\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>505 HTTP Version Not Supported</h1>"
+						"<p>Incorrect http version was given.</p></body></html>");
+
+    send(fd, response_buf, response_len, 0);
+    free(response_buf);
+    return 0;
+}
+
+int check_syntax_error(char* request){
+	int status;
+	int cflags = REG_EXTENDED | REG_NEWLINE;
+	regmatch_t pmatch;
+	const size_t nmatch = 1;
+	regex_t reg, end_reg;
+	const char *pattern = "^[a-zA-Z]+(-[a-zA-Z]+)*:";
+	regcomp(&reg, pattern, cflags);
+
+	int i = 0;
+    int length = strlen(request);
+    while(i < length - 2){
+        status = regexec(&reg, request + i, nmatch, &pmatch, 0);
+        if(status == REG_NOMATCH)
+		    break;
+	    else if (status == 0){
+            char out[40] = {0};
+            strncpy(out, request + i + pmatch.rm_so, pmatch.rm_eo - pmatch.rm_so);
+            out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
+            i += pmatch.rm_eo;
+	    	printf("%s\n", out);
+			
+            if (strcmp(out, "Host") && strcmp(out, "Connection") &&
+				strcmp(out, "Upgrade-Insecure-Requests") && 
+				strcmp(out, "User-Agent") && strcmp(out, "Accept") && 
+				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language")){
+				return 1;
+			}
+	    }
+    }
+	regfree(&reg);
+	return 0;
+}
+
+void get_request_parser(char *request, int fd){
+	char rel_path[128] = {0};
+	int flag = get_rel_path(request, rel_path);
+	printf("relative path: %s\n", rel_path);
+	if(check_syntax_error(request)){
+		send_400(fd);
+	} else if(!strcmp(rel_path, "/text.html") || !strcmp(rel_path, "/www/text.html")){
+		send_html(fd, "www/text.html");
+	} else if (!strcmp(rel_path, "/picture.html") || !strcmp(rel_path, "/www/picture.html")){
+		send_html(fd, "www/picture.html");
+	} else if (!strcmp(rel_path, "/bigpicture.html") || !strcmp(rel_path, "/www/bigpicture.html")){
+		send_html(fd, "www/bigpicture.html");
+	} else if (!strcmp(rel_path, "/purdue.jpeg") || !strcmp(rel_path, "/www/purdue.jpeg")){
+		send_picture(fd);
+	} else if (!strcmp(rel_path, "/bigpicture.jpeg") || !strcmp(rel_path, "/www/bigpicture.jpeg")){
+		send_big_picture(fd);
+	}else{
+		send_404(fd);
+	}
+	return;
 }
 
 void *handle_connection(client_t *cli){
@@ -83,21 +358,29 @@ void *handle_connection(client_t *cli){
 	response_msg[strlen(header) + strlen(addr_buf)] = ',';
 	response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
 	memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
-
-	// send reponse
-	printf("%s\n", response_msg);
-	// send(cli->fd, response_msg, strlen(response_msg), 0);
-
-	while(send(cli->fd, response_msg, 1, 0) >= 0){
-		// polling for closing connection
-	}
-	// closing the connected socket
-	printf("close-client:%s,%s\n", addr_buf, port_buf);
 	
+	printf("%s\n", response_msg);
+
+	//If recv http request
+	if(!strncmp(cli_msg, "GET ", 4)){
+		get_request_parser(cli_msg, cli->fd);
+	}else{
+		send(cli->fd, response_msg, strlen(response_msg), 0);
+	}
+	
+	// while(send(cli->fd, response_msg, 1, 0) >= 0){
+	// 	// polling for closing connection
+	// 	sleep(1);
+	// 	printf("sleep\n");
+	// }
+	// closing the connected socket
+	sleep(600);
+	printf("close-client:%s,%s\n", addr_buf, port_buf);
 	pthread_mutex_lock(&clients_mutex);
+	
 	close(cli->fd);
 	pthread_mutex_lock(&clients_mutex);
-	Dequeue(cli->uid);
+	// Dequeue(cli->uid);
     pthread_detach(pthread_self());
 	free(cli);
 	free(addr_buf);
@@ -154,9 +437,9 @@ int main(int argc, char const* argv[])
 		cli->address = address;
 		cli->fd = new_socket;
 		cli->uid = uid++;
-		int cli_idx = Inqueue(cli);
+		// int cli_idx = Inqueue(cli);
 		pthread_create(&tid, NULL, handle_connection, cli);
-		// sleep(1);
+		sleep(1);
 		
 	}
 	// closing the listening socket

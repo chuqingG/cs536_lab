@@ -349,12 +349,41 @@ int check_syntax_error(char* request){
 	return 0;
 }
 
+int check_version_error(char* request){
+	//return 1 if error
+	int status;
+	int cflags = REG_EXTENDED | REG_NEWLINE;
+	regmatch_t pmatch;
+	const size_t nmatch = 1;
+	regex_t reg, end_reg;
+	const char *pattern = "HTTP/[0-9]\\.[0-9]*:";
+	regcomp(&reg, pattern, cflags);
+
+	status = regexec(&reg, request, nmatch, &pmatch, 0);
+    if(status == REG_NOMATCH)
+	    return 1;
+	else if (status == 0){
+        char out[10] = {0};
+        strncpy(out, request + pmatch.rm_eo - 3, 3);
+        out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
+		printf("%s\n", out);
+		
+        if (strcmp(out, "1.1")){
+			return 1;
+		}
+	}
+	regfree(&reg);
+	return 0;
+}
+
 void get_request_parser(char *request, int fd){
 	char rel_path[128] = {0};
 	int flag = get_rel_path(request, rel_path);
 	printf("relative path: %s\n", rel_path);
 	if(check_syntax_error(request)){
 		send_400(fd);
+	} else if(check_version_error(request)){
+		send_505(fd);
 	} else if(!strcmp(rel_path, "/text.html") || !strcmp(rel_path, "/www/text.html")){
 		send_html(fd, "www/text.html");
 	} else if (!strcmp(rel_path, "/picture.html") || !strcmp(rel_path, "/www/picture.html")){

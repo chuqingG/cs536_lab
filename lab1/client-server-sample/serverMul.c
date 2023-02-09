@@ -76,16 +76,16 @@ void *handle_connection(client_t *cli){
 	int idx = strlen(header) + strlen(addr_buf) + strlen(port_buf) + 2; // for , and \n
 
 	int valread = read(cli->fd, cli_msg, 1024);
-	
+	printf("message-from-client:%s,%s\n%s\n", addr_buf, port_buf, cli_msg);
 	memcpy(response_msg, header, strlen(header) * sizeof(char));
 	memcpy(response_msg + strlen(header), addr_buf, strlen(addr_buf) * sizeof(char));
 	memcpy(response_msg + strlen(header) + strlen(addr_buf) + 1, port_buf, strlen(port_buf) * sizeof(char));
 	response_msg[strlen(header) + strlen(addr_buf)] = ',';
 	response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
-	memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
-
+	memcpy(response_msg + idx, cli_msg, strlen(cli_msg) * sizeof(char));
+	// response_msg[idx + ]
 	// send reponse
-	printf("%s\n", response_msg);
+	// printf("%s\n", response_msg);
 	send(cli->fd, response_msg, strlen(response_msg), 0);
 
 	while(send(cli->fd, response_msg, 1, 0) >= 0){

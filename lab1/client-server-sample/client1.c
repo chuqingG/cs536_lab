@@ -7,7 +7,66 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <regex.h>
+#include <time.h>
+#include <sys/time.h>
+#include <pthread.h>
 #define PORT 12000
+
+pthread_mutex_t requests_mutex = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic unsigned int req_count = 0;
+#define MAX 32
+
+typedef struct{
+	int uid;
+	char src[128];
+	char server_ip[32];
+	int sock;
+} request_pack;
+request_pack *requests[MAX];
+
+int Inqueue(request_pack *rq){
+	pthread_mutex_lock(&requests_mutex);
+	int i;
+	for(i = 0; i < MAX; ++i)
+		if(!requests[i]){
+			requests[i] = rq;
+			requests[i]->uid = req_count++;
+			break;
+		}
+	pthread_mutex_unlock(&requests_mutex);
+	return i;
+}
+
+void Dequeue(int uid){
+	pthread_mutex_lock(&requests_mutex);
+	for(int i=0; i < MAX; ++i){
+		if(requests[i]){
+			if(requests[i]->uid == uid){
+				requests[i] = NULL;
+				break;
+			}
+		}
+	}
+	pthread_mutex_unlock(&requests_mutex);
+}
+
+int recv_line(int fd,char *buf, int size){
+	//return the current idx 
+	int i = 0;
+	char ch;
+	for(i = 0;i < size;++i){
+		int n = recv(fd, &ch, 1, 0);
+		if(n == 1){
+			buf[i] = ch;
+			if(ch == '\n') 
+				break;
+		} else{
+			return i;
+		}
+	}
+	return i + 1;
+}
+
 
 void arg_parser(const char* url, char* port_str, char* addr, char* path){
 	int status;
@@ -53,6 +112,36 @@ void send_get(int fd, char* path, char* ip){
 	printf("Send request:\n%s", send_buf);
 }
 
+
+void send_resource_request_and_read_result(int sock, const char* server_port, const char* server_ip, 
+											struct sockaddr_in* serv_addr){
+	int i;
+	pthread_t tid;
+	for(i = 0; i < MAX; ++i){
+		if(!requests[i]){
+			break;
+		}
+		strcpy(requests[i]->server_ip, server_ip);
+		requests[i]->sock = sock;
+		// pthread_create(&tid, NULL, handle_subrequest, requests[i]);
+		send_get(sock, requests[i]->src, server_ip);
+		sleep(1);
+		char receive_msg[1024] = { 0 };
+		while(1){
+			int read_len = recv_line(sock, receive_msg, 1024);
+			receive_msg[read_len] = '\0';
+			// printf("len %d\n", read_len);
+			if(read_len <= 0)
+				break;
+			if(frame_parser(receive_msg) == 1){
+				printf("%s", receive_msg);
+			}
+		}
+	}
+
+	return;
+}
+
 int main(int argc, char const* argv[])
 {	
 	char ipaddr[20] = {0};
@@ -62,10 +151,22 @@ int main(int argc, char const* argv[])
 	int sock = 0, client_fd;
 	struct sockaddr_in serv_addr;
 
-	char receive_msg[1024] = { 0 };
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	char receive_msg[2048 + 10] = { 0 };
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
 		return -1;
+	}
+
+	struct timeval tv_out;
+	tv_out.tv_sec = 1;
+	tv_out.tv_usec = 0;
+	int opt = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv_out, sizeof(tv_out))) {
+		perror("setsockopt");
+		exit(EXIT_FAILURE);
 	}
 
 	serv_addr.sin_family = AF_INET;
@@ -90,9 +191,16 @@ int main(int argc, char const* argv[])
 	}
 
 	send_get(sock, path, ipaddr);
-	int valread = read(sock, receive_msg, 1024);
+	int valread = recv(sock, receive_msg, 2048, 0);
+	if(html_source_parser(receive_msg)){
+		printf("Parse html Failed \n");
+		return -1;
+	}
+	send_resource_request_and_read_result(sock, port, ipaddr, &serv_addr);
 	printf("Get response:\n%s", receive_msg);
-	
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	printf("Time elapsed: %ld.%09ld seconds\n",
+             end.tv_sec - start.tv_sec, end.tv_nsec - start.tv_nsec);
 	// closing the connected socket
 	sleep(10);
 	close(client_fd);

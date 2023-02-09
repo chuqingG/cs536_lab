@@ -49,7 +49,7 @@ int main(int argc, char const* argv[])
 	printf("%s\n", receive_msg);
 	
 	// closing the connected socket
-	sleep(20);
+	sleep(60);
 	close(client_fd);
 	return 0;
 }

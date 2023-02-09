@@ -337,7 +337,7 @@ int check_syntax_error(char* request){
             strncpy(out, request + i + pmatch.rm_so, pmatch.rm_eo - pmatch.rm_so);
             out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
             i += pmatch.rm_eo;
-	    	printf("%s\n", out);
+	    	// printf("%s\n", out);
 			
             if (strcmp(out, "Host") && strcmp(out, "Connection") &&
 				strcmp(out, "Upgrade-Insecure-Requests") && 

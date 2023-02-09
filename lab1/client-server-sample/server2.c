@@ -52,6 +52,7 @@ int recv_per_get(int fd, char *buf){
 		if(line_len <= 2)
 			break;
 	}
+	buf[i] = '\0';
 	return i;
 }
 
@@ -336,12 +337,13 @@ int check_syntax_error(char* request){
             strncpy(out, request + i + pmatch.rm_so, pmatch.rm_eo - pmatch.rm_so);
             out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
             i += pmatch.rm_eo;
-	    	printf("%s\n", out);
+	    	// printf("%s\n", out);
 			
             if (strcmp(out, "Host") && strcmp(out, "Connection") &&
 				strcmp(out, "Upgrade-Insecure-Requests") && 
 				strcmp(out, "User-Agent") && strcmp(out, "Accept") && 
-				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language")){
+				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language") &&
+				strcmp(out, "Cache-Control") && strcmp(out, "Referer")){
 				return 1;
 			}
 	    }
@@ -357,17 +359,19 @@ int check_version_error(char* request){
 	regmatch_t pmatch;
 	const size_t nmatch = 1;
 	regex_t reg, end_reg;
-	const char *pattern = "HTTP/[0-9]\\.[0-9]*:";
+	const char *pattern = "HTTP/[0-9]\\.[0-9]*";
 	regcomp(&reg, pattern, cflags);
 
-	status = regexec(&reg, request, nmatch, &pmatch, 0);
+	char head[50] = {0};
+	copy_line(request, head);
+	status = regexec(&reg, head, nmatch, &pmatch, 0);
     if(status == REG_NOMATCH)
 	    return 1;
 	else if (status == 0){
         char out[10] = {0};
-        strncpy(out, request + pmatch.rm_eo - 3, 3);
-        out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
-		printf("%s\n", out);
+        strncpy(out, head + pmatch.rm_eo - 3, 3);
+        out[3] = '\0';
+		// printf("%s\n", out);
 		
         if (strcmp(out, "1.1")){
 			return 1;
@@ -438,7 +442,7 @@ void *handle_connection(client_t *cli){
 	
 	while(1){
 		read_len = recv_per_get(cli->fd, cli_msg);
-		cli_msg[read_len] = '\0';
+		// cli_msg[read_len] = '\0';
 		if(read_len <= 0){
 			printf("close-client:%s,%s\n", addr_buf, port_buf);
 			break;

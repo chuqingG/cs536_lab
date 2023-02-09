@@ -68,6 +68,39 @@ int recv_line(int fd,char *buf, int size){
 }
 
 
+int html_source_parser(const char* html){
+	// printf("The return value:\n%s\n", html);
+	int status;
+	int cflags = REG_EXTENDED | REG_NEWLINE;
+	regmatch_t pm;
+	const size_t nmatch = 1;
+	regex_t reg;
+	const char *pattern = "src=\"(/[a-zA-Z0-9]+)*[a-zA-Z0-9]+\\.[a-zA-Z0-9]+\"";
+	regcomp(&reg, pattern, cflags);
+
+	int i = 0;
+    int length = strlen(html);
+    while(i < length){
+        status = regexec(&reg, html + i, nmatch, &pm, 0);
+        if(status == REG_NOMATCH)
+		    break;
+	    else if (status == 0){
+            char out[40] = {0};
+			out[0] = '/';
+            strncpy(out + 1, html + i + pm.rm_so + 5, pm.rm_eo - pm.rm_so - 5);
+            out[pm.rm_eo - pm.rm_so - 5] = '\0';
+            i += pm.rm_eo;
+	    	// printf("%s\n", out);
+			request_pack* req = (request_pack *)malloc(sizeof(request_pack));
+			req->uid = req_count++;
+			strcpy(req->src, out);
+			Inqueue(req); 
+	    }
+    }
+	regfree(&reg);
+	return 0;
+}
+
 void arg_parser(const char* url, char* port_str, char* addr, char* path){
 	int status;
 	int cflags = REG_EXTENDED | REG_NEWLINE;
@@ -133,9 +166,6 @@ void send_resource_request_and_read_result(int sock, const char* server_port, co
 			// printf("len %d\n", read_len);
 			if(read_len <= 0)
 				break;
-			if(frame_parser(receive_msg) == 1){
-				printf("%s", receive_msg);
-			}
 		}
 	}
 
@@ -197,7 +227,7 @@ int main(int argc, char const* argv[])
 		return -1;
 	}
 	send_resource_request_and_read_result(sock, port, ipaddr, &serv_addr);
-	printf("Get response:\n%s", receive_msg);
+	// printf("Get response:\n%s", receive_msg);
 	clock_gettime(CLOCK_MONOTONIC, &end);
 	printf("Time elapsed: %ld.%09ld seconds\n",
              end.tv_sec - start.tv_sec, end.tv_nsec - start.tv_nsec);

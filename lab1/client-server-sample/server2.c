@@ -63,6 +63,7 @@ int copy_line(char *src, char *buf){
 		if(src[i] == '\n') 
 			break;
 	}
+	buf[i+1] = '\0';
 	return i + 1;
 }
 

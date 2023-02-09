@@ -21,6 +21,8 @@ typedef struct{
 	struct sockaddr_in address;
 	int fd;
 	int uid;
+	char ip[20];
+	char port[10];
 	// char name[32];
 } client_t;
 client_t *clients[MAX];
@@ -44,7 +46,7 @@ int read_line(int fd,char *buf, int size){
 	return i + 1;
 }
 
-int copy_line(char *src, char *buf){
+int copy_line(const char *src, char *buf){
 	//return the length of the copied line
 	int i = 0;
 	for(i = 0; src[i] != '\0'; ++i){
@@ -52,6 +54,7 @@ int copy_line(char *src, char *buf){
 		if(src[i] == '\n') 
 			break;
 	}
+	buf[i+1] = '\0';
 	return i + 1;
 }
 
@@ -85,7 +88,7 @@ int read_file(char* des, char* path){
 	return length;
 }
 
-int send_picture(int fd){
+int send_picture(client_t *cli){
 	// FILE *fp;
     char readBuf[960*320 + 1024] = {0}; //600k
 
@@ -106,7 +109,9 @@ int send_picture(int fd){
     memcpy(p_bufs+response_len, readBuf, length);
     response_len += length;
     
-    send(fd, p_bufs, response_len, 0);
+    send(cli->fd, p_bufs, response_len, 0);
+	printf("message-to-client:%s,%s\nHTTP/1.1 200 OK\n",
+			cli->ip,cli->port);
     free(p_bufs);
     return 0;
 }
@@ -171,7 +176,7 @@ int min_(int x, int y){
 		return y;
 }
 
-int send_big_picture(int fd){
+int send_big_picture(client_t *cli){
 	FILE *f = fopen("www/bigpicture.jpeg", "rb");
 	if (f == NULL){
 		perror("open file");
@@ -190,8 +195,9 @@ int send_big_picture(int fd){
 	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
 							"Content-Type: image/jpeg\r\n"
 							"Accept-Ranges:bytes\r\n\r\n");
-	send(fd, head_buf, head_len, 0);	
-
+	send(cli->fd, head_buf, head_len, 0);	
+	printf("message-to-client:%s,%s\nHTTP/1.1 200 OK\n",
+			cli->ip,cli->port);
 	// send chunked body
 	int seg_len = 102400;
 	char read_buf[102400 + 100] = {0};
@@ -199,13 +205,48 @@ int send_big_picture(int fd){
 	for (int i = 0; i < length; i += seg_len){
 		int size = min_(seg_len, length - i);
 		size = fread(read_buf, 1, size, f);
-		send(fd, read_buf, size, 0);
+		send(cli->fd, read_buf, size, 0);
 	}
 	free(head_buf);
 	fclose(f);
 }
 
-int send_html(int fd, char* path){
+int send_video(client_t *cli, const char *path){
+	FILE *f = fopen(path, "rb");
+	if (f == NULL){
+		perror("open file");
+		exit(EXIT_FAILURE);
+	}
+	fseek(f, 0, SEEK_END);
+	int length = ftell(f);
+	if (length <= 0){
+		perror("seek end");
+		exit(EXIT_FAILURE);
+	}
+	rewind(f);
+
+	// send head 
+	char *head_buf = (char *)malloc(length + 1024);
+	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
+							"Content-Type: video/mp4\r\n"
+							"Accept-Ranges:bytes\r\n\r\n");
+	send(cli->fd, head_buf, head_len, 0);	
+	printf("message-to-client:%s,%s\nHTTP/1.1 200 OK\n",
+			cli->ip,cli->port);
+	// send chunked body
+	int seg_len = 102400;
+	char read_buf[102400 + 100] = {0};
+	// printf("frame count:%d", (int)length / seg_len);
+	for (int i = 0; i < length; i += seg_len){
+		int size = min_(seg_len, length - i);
+		size = fread(read_buf, 1, size, f);
+		send(cli->fd, read_buf, size, 0);
+	}
+	free(head_buf);
+	fclose(f);
+}
+
+int send_html(client_t *cli, char* path){
     char file_buf[1024] = {0}; 
 	int length = read_file(file_buf, path);
     
@@ -222,12 +263,14 @@ int send_html(int fd, char* path){
                         length);
 
     memcpy(response_buf + response_len, file_buf, length);
-    send(fd, response_buf, response_len + length, 0);
+    send(cli->fd, response_buf, response_len + length, 0);
+	printf("message-to-client:%s,%s\nHTTP/1.1 200 OK\n",
+			cli->ip,cli->port);
     free(response_buf);
     return 0;
 }
 
-int send_404(int fd){
+int send_404(client_t *cli){
 
     char* response_buf = (char *)malloc(1024);
       
@@ -235,13 +278,14 @@ int send_404(int fd){
 						"HTTP/1.1 404 Not Found\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>404 Not Found</h1>"
 						"<p>The requested URL was not found on this server.</p></body></html>");
-
-    send(fd, response_buf, response_len, 0);
+	printf("message-to-client:%s,%s\nHTTP/1.1 404 Not Found\n",
+			cli->ip,cli->port);
+    send(cli->fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
 }
 
-int send_400(int fd){
+int send_400(client_t *cli){
 
     char* response_buf = (char *)malloc(1024);
       
@@ -250,12 +294,14 @@ int send_400(int fd){
 						"<!DOCTYPE html><html><body><h1>400 Bad Request</h1>"
 						"<p>Please check the syntax of your request.</p></body></html>");
 
-    send(fd, response_buf, response_len, 0);
+    printf("message-to-client:%s,%s\nHTTP/1.1 400 Bad Request\n",
+			cli->ip,cli->port);
+    send(cli->fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
 }
 
-int send_505(int fd){
+int send_505(client_t *cli){
 
     char* response_buf = (char *)malloc(1024);
       
@@ -264,7 +310,9 @@ int send_505(int fd){
 						"<!DOCTYPE html><html><body><h1>505 HTTP Version Not Supported</h1>"
 						"<p>Incorrect http version was given.</p></body></html>");
 
-    send(fd, response_buf, response_len, 0);
+    printf("message-to-client:%s,%s\nHTTP/1.1 505 HTTP Version Not Supported\n",
+			cli->ip,cli->port);
+    send(cli->fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
 }
@@ -289,12 +337,13 @@ int check_syntax_error(char* request){
             strncpy(out, request + i + pmatch.rm_so, pmatch.rm_eo - pmatch.rm_so);
             out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
             i += pmatch.rm_eo;
-	    	printf("%s\n", out);
+	    	// printf("%s\n", out);
 			
             if (strcmp(out, "Host") && strcmp(out, "Connection") &&
 				strcmp(out, "Upgrade-Insecure-Requests") && 
 				strcmp(out, "User-Agent") && strcmp(out, "Accept") && 
-				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language")){
+				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language") &&
+				strcmp(out, "Cache-Control") && strcmp(out, "Referer")){
 				return 1;
 			}
 	    }
@@ -310,17 +359,20 @@ int check_version_error(char* request){
 	regmatch_t pmatch;
 	const size_t nmatch = 1;
 	regex_t reg, end_reg;
-	const char *pattern = "HTTP/[0-9]\\.[0-9]*:";
+	const char *pattern = "HTTP/[0-9]\\.[0-9]*";
 	regcomp(&reg, pattern, cflags);
 
-	status = regexec(&reg, request, nmatch, &pmatch, 0);
+	char head[50] = {0};
+	copy_line(request, head);
+	// printf("%s\n", head);
+	status = regexec(&reg, head, nmatch, &pmatch, 0);
     if(status == REG_NOMATCH)
 	    return 1;
 	else if (status == 0){
         char out[10] = {0};
-        strncpy(out, request + pmatch.rm_eo - 3, 3);
-        out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
-		printf("%s\n", out);
+        strncpy(out, head + pmatch.rm_eo - 3, 3);
+        out[3] = '\0';
+		// printf("%s\n", out);
 		
         if (strcmp(out, "1.1")){
 			return 1;
@@ -330,30 +382,30 @@ int check_version_error(char* request){
 	return 0;
 }
 
-void get_request_parser(char *request, int fd){
+void get_request_parser(char *request, client_t *cli){
 	char rel_path[128] = {0};
 	int flag = get_rel_path(request, rel_path);
-	printf("relative path: %s\n", rel_path);
+	// printf("relative path: %s\n", rel_path);
 	if(check_syntax_error(request)){
-		send_400(fd);
+		send_400(cli);
 	} else if(check_version_error(request)){
-		send_505(fd);
+		send_505(cli);
 	} else if(!strcmp(rel_path, "/text.html") || !strcmp(rel_path, "/www/text.html")){
-		send_html(fd, "www/text.html");
+		send_html(cli, "www/text.html");
 	} else if (!strcmp(rel_path, "/picture.html") || !strcmp(rel_path, "/www/picture.html")){
-		send_html(fd, "www/picture.html");
+		send_html(cli, "www/picture.html");
 	} else if (!strcmp(rel_path, "/bigpicture.html") || !strcmp(rel_path, "/www/bigpicture.html")){
-		send_html(fd, "www/bigpicture.html");
+		send_html(cli, "www/bigpicture.html");
 	} else if (!strcmp(rel_path, "/video.html") || !strcmp(rel_path, "/www/video.html")){
-		send_html(fd, "www/video.html");
+		send_html(cli, "www/video.html");
 	} else if (!strcmp(rel_path, "/video.mp4") || !strcmp(rel_path, "/www/video.mp4")){
-		send_video_chunked(fd, "www/video.mp4");
+		send_video(cli, "www/video.mp4");
 	} else if (!strcmp(rel_path, "/purdue.jpeg") || !strcmp(rel_path, "/www/purdue.jpeg")){
-		send_picture(fd);
+		send_picture(cli);
 	} else if (!strcmp(rel_path, "/bigpicture.jpeg") || !strcmp(rel_path, "/www/bigpicture.jpeg")){
-		send_big_picture(fd);
+		send_big_picture(cli);
 	}else{
-		send_404(fd);
+		send_404(cli);
 	}
 	return;
 }
@@ -383,7 +435,14 @@ void *handle_connection(client_t *cli){
 	char response_msg[1024] = { 0 };
 	int idx = strlen(header) + strlen(addr_buf) + strlen(port_buf) + 2; // for , and \n
 
-	int valread = read(cli->fd, cli_msg, 1024);
+	int valread = recv(cli->fd, cli_msg, 1024, 0);
+	char firstline[128] = { 0 };
+	int t = copy_line(cli_msg, firstline);
+	printf("message-from-client:%s,%s\n%s", addr_buf, port_buf, firstline);
+	// char head[50] = {0};
+
+	strcpy(cli->ip, addr_buf);
+	strcpy(cli->port, port_buf);
 	
 	memcpy(response_msg, header, strlen(header) * sizeof(char));
 	memcpy(response_msg + strlen(header), addr_buf, strlen(addr_buf) * sizeof(char));
@@ -392,11 +451,11 @@ void *handle_connection(client_t *cli){
 	response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
 	memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
 	
-	printf("%s\n", response_msg);
+	// printf("%s\n", response_msg);
 
 	//If recv http request
 	if(!strncmp(cli_msg, "GET ", 4)){
-		get_request_parser(cli_msg, cli->fd);
+		get_request_parser(cli_msg, cli);
 	}else{
 		send(cli->fd, response_msg, strlen(response_msg), 0);
 	}

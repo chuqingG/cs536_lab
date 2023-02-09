@@ -7,6 +7,30 @@
 #include <unistd.h>
 #include <stdlib.h>
 #define PORT 12000
+#define TRANS
+
+void str_trans(char* ori){
+	printf("%s\n", ori);
+	int len = strlen(ori);
+	char *temp = (char*)malloc(len * sizeof(char));
+	int j = 0;
+	for(int i = 0; i < len; i++){
+		char ch = ori[i];
+		if(ch == '\\' && ori[i+1] == 'r'){
+			temp[j++] = '\r';
+			i++;
+		} else if (ch == '\\' && ori[i+1] == 'n'){
+			temp[j++] = '\n';
+			i++;
+		} else {
+			temp[j++] = ch;
+		}
+		i++;
+	}
+	temp[j] = '\0';
+	strcpy(ori, temp);
+	printf("%s\n", ori);
+}
 
 int main(int argc, char const* argv[])
 {
@@ -44,7 +68,10 @@ int main(int argc, char const* argv[])
 
 	char sentence[256];
 	strcpy(sentence, argv[3]); //message
-	send(sock, argv[3], strlen(argv[3]), 0);
+#ifdef TRANS
+	str_trans(sentence);
+#endif
+	send(sock, sentence, strlen(sentence), 0);
 	int valread = read(sock, receive_msg, 1024);
 	printf("%s\n", receive_msg);
 	

@@ -10,26 +10,24 @@
 #define TRANS
 
 void str_trans(char* ori){
-	printf("%s\n", ori);
 	int len = strlen(ori);
 	char *temp = (char*)malloc(len * sizeof(char));
 	int j = 0;
 	for(int i = 0; i < len; i++){
 		char ch = ori[i];
-		if(ch == '\\' && ori[i+1] == 'r'){
+		// printf("%c ", ch);
+		if(ch == (char)92 && ori[i+1] == 'r'){
 			temp[j++] = '\r';
 			i++;
-		} else if (ch == '\\' && ori[i+1] == 'n'){
+		} else if (ch == (char)92 && ori[i+1] == 'n'){
 			temp[j++] = '\n';
 			i++;
 		} else {
 			temp[j++] = ch;
 		}
-		i++;
 	}
 	temp[j] = '\0';
 	strcpy(ori, temp);
-	printf("%s\n", ori);
 }
 
 int main(int argc, char const* argv[])

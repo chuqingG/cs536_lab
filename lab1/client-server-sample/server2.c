@@ -165,18 +165,19 @@ int send_picture_chunked(int fd, const char* path){
 	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
 							"Content-Type: image/jpeg\r\n"
 							"Accept-Ranges:bytes\r\n\r\n");
+	send(fd, head_buf, head_len, 0);
 #else 
-	int head_len = sprintf(head_buf, "HTTP/2.0 200 OK\r\n"
-							"Content-Type: image/jpeg\r\n"
-							"Accept-Ranges:bytes\r\n\r\n");
+	// int head_len = sprintf(head_buf, "HTTP/2.0 200 OK\r\n"
+	// 						"Content-Type: image/jpeg\r\n"
+	// 						"Accept-Ranges:bytes\r\n\r\n");
+	// send(fd, head_buf, head_len, 0);
 #endif
-	send(fd, head_buf, head_len, 0);	
 
 	// send chunked body
 	int seg_len = 40 * 1024;
 	char read_buf[40 * 1024 + 100] = {0};
 	int frame_count = 0;
-	printf("frame count:%d", (int)length / seg_len);
+	printf("frame count:%d\n", (int)length / seg_len);
 	for (int i = 0; i < length; i += seg_len){
 		int size = min_(seg_len, length - i);
 #ifndef HTTP2
@@ -184,10 +185,12 @@ int send_picture_chunked(int fd, const char* path){
 		send(fd, read_buf, size, 0);
 #else	
 		int head_len = sprintf(read_buf, 
-						"Object-Frame: %s Frame_%d\n", path + 3, frame_count); //rm www
+						"Object-Frame: %s Frame_%d\n", path + 3, frame_count + 1); //rm www
 		// size = fread(read_buf + head_len, 1, size, f);
 		// send(fd, read_buf, size, 0);
 		send(fd, read_buf, head_len, 0);
+		if(frame_count % 100 == 0)
+			printf("%s\n",read_buf);
 		frame_count++;
 #endif
 	}
@@ -215,17 +218,19 @@ int send_video_chunked(int fd, const char* path){
 	int head_len = sprintf(head_buf, "HTTP/1.1 200 OK\r\n"
 							"Content-Type: video/mp4\r\n"
 							"Accept-Ranges:bytes\r\n\r\n");
+	send(fd, head_buf, head_len, 0);
 #else 
-	int head_len = sprintf(head_buf, "HTTP/2.0 200 OK\r\n"
-							"Content-Type: video/mp4\r\n"
-							"Accept-Ranges:bytes\r\n\r\n");
-#endif
-	send(fd, head_buf, head_len, 0);	
+	// int head_len = sprintf(head_buf, "HTTP/2.0 200 OK\r\n"
+	// 						"Content-Type: video/mp4\r\n"
+	// 						"Accept-Ranges:bytes\r\n\r\n");
 
-	// send chunked body
+	// send(fd, head_buf, head_len, 0);	
+#endif
+	/// send chunked body
 	int seg_len = 40 * 1024;
 	char read_buf[40 * 1024 + 100] = {0};
-	// printf("frame count:%d", (int)length / seg_len);
+	int frame_count = 0;
+	printf("frame count:%d\n", (int)length / seg_len);
 	for (int i = 0; i < length; i += seg_len){
 		int size = min_(seg_len, length - i);
 #ifndef HTTP2
@@ -233,10 +238,13 @@ int send_video_chunked(int fd, const char* path){
 		send(fd, read_buf, size, 0);
 #else	
 		int head_len = sprintf(read_buf, 
-						"Object-Frame: %s Frame_%d\n", path + 3, i); //rm www
+						"Object-Frame: %s Frame_%d\n", path + 3, frame_count + 1); //rm www
 		// size = fread(read_buf + head_len, 1, size, f);
 		// send(fd, read_buf, size, 0);
+		if(frame_count % 100 == 0)
+			printf("%s\n",read_buf);
 		send(fd, read_buf, head_len, 0);
+		frame_count++;
 #endif
 	}
 	free(head_buf);
@@ -362,7 +370,7 @@ void get_request_parser(char *request, int fd){
 	} else if (!strcmp(rel_path, "/bigpicture.jpeg") || !strcmp(rel_path, "/www/bigpicture.jpeg")){
 		send_picture_chunked(fd, "www/bigpicture.jpeg");
 	} else if (!strcmp(rel_path, "/video.mp4") || !strcmp(rel_path, "/www/video.mp4")){
-		// send_video_chunked(fd, "www/video.mp4");
+		send_video_chunked(fd, "www/video.mp4");
 	} else if (!strcmp(rel_path, "/video.html") || !strcmp(rel_path, "/www/video.html")){
 		send_html(fd, "www/video.html");
 	} else {
@@ -395,11 +403,12 @@ void *handle_connection(client_t *cli){
 	char cli_msg[2048] = { 0 };
 	char response_msg[2048] = { 0 };
 	int idx = strlen(header) + strlen(addr_buf) + strlen(port_buf) + 2; // for , and \n
-
+	printf("message-from-client:%s,%s\n", addr_buf, port_buf);
 	int read_len;
 	
 	while(1){
 		read_len = recv_per_get(cli->fd, cli_msg);
+		cli_msg[read_len] = '\0';
 		if(read_len <= 0){
 			printf("close-client:%s,%s\n", addr_buf, port_buf);
 			break;
@@ -412,7 +421,7 @@ void *handle_connection(client_t *cli){
 			response_msg[strlen(header) + strlen(addr_buf) + strlen(port_buf) + 1] = '\n';
 			memcpy(response_msg + idx, cli_msg, sizeof(cli_msg));
 	
-			printf("%s\n", response_msg);
+			// printf("%s", response_msg);
 
 			//If recv http request
 			if(!strncmp(cli_msg, "GET ", 4)){

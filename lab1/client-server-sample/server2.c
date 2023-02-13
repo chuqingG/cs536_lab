@@ -372,10 +372,15 @@ int check_version_error(char* request){
         strncpy(out, head + pmatch.rm_eo - 3, 3);
         out[3] = '\0';
 		// printf("%s\n", out);
-		
+#ifndef HTTP2		
         if (strcmp(out, "1.1")){
 			return 1;
 		}
+#else
+		if (strcmp(out, "2.0")){
+			return 1;
+		}
+#endif
 	}
 	regfree(&reg);
 	return 0;

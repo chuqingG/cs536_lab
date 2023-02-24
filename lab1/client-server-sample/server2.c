@@ -278,12 +278,17 @@ int send_html(int fd, char* path){
 int send_404(int fd){
 
     char* response_buf = (char *)malloc(1024);
-      
+#ifndef HTTP2    
     int response_len = sprintf(response_buf,
 						"HTTP/1.1 404 Not Found\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>404 Not Found</h1>"
 						"<p>The requested URL was not found on this server.</p></body></html>");
-
+#else 
+	int response_len = sprintf(response_buf,
+						"HTTP/2.0 404 Not Found\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>404 Not Found</h1>"
+						"<p>The requested URL was not found on this server.</p></body></html>");
+#endif
     send(fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
@@ -293,11 +298,17 @@ int send_400(int fd){
 
     char* response_buf = (char *)malloc(1024);
       
+#ifndef HTTP2  
     int response_len = sprintf(response_buf,
 						"HTTP/1.1 400 Bad Request\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>400 Bad Request</h1>"
 						"<p>Please check the syntax of your request.</p></body></html>");
-
+#else
+	int response_len = sprintf(response_buf,
+						"HTTP/2.0 400 Bad Request\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>400 Bad Request</h1>"
+						"<p>Please check the syntax of your request.</p></body></html>");
+#endif
     send(fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
@@ -306,12 +317,17 @@ int send_400(int fd){
 int send_505(int fd){
 
     char* response_buf = (char *)malloc(1024);
-      
+#ifndef HTTP2  
     int response_len = sprintf(response_buf,
 						"HTTP/1.1 505 HTTP Version Not Supported\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>505 HTTP Version Not Supported</h1>"
 						"<p>Incorrect http version was given.</p></body></html>");
-
+#else
+	int response_len = sprintf(response_buf,
+						"HTTP/2.0 505 HTTP Version Not Supported\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>505 HTTP Version Not Supported</h1>"
+						"<p>Incorrect http version was given.</p></body></html>");
+#endif
     send(fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;

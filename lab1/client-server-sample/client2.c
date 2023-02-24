@@ -87,7 +87,7 @@ int html_source_parser(const char* html){
 
 	int i = 0;
     int length = strlen(html);
-	printf("%s\n", html);
+	// printf("%s\n", html);
     while(i < length){
         status = regexec(&reg, html + i, nmatch, &pm, 0);
         if(status == REG_NOMATCH)
@@ -98,7 +98,7 @@ int html_source_parser(const char* html){
             strncpy(out + 1, html + i + pm.rm_so + 5, pm.rm_eo - pm.rm_so - 5);
             out[pm.rm_eo - pm.rm_so - 5] = '\0';
             i += pm.rm_eo;
-	    	printf("%s\n", out);
+	    	// printf("%s\n", out);
 			request_pack* req = (request_pack *)malloc(sizeof(request_pack));
 			req->uid = req_count++;
 			strcpy(req->src, out);
@@ -263,7 +263,7 @@ void send_resource_request_and_read_result(int sock, const char* server_port, co
 		requests[i]->sock = sock_i;
 		pthread_create(&tid, NULL, handle_subrequest, requests[i]);
 	}
-	if(request[0])
+	if(requests[0])
 		pthread_join(tid, NULL);
 #endif
 #ifndef MULTSOCK

@@ -1,1 +1,1 @@
-# CS536 lab
+# CSXXX lab

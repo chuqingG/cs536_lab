@@ -84,7 +84,7 @@ int html_source_parser(const char* html){
 	regex_t reg;
 	const char *pattern = "src=\"(/[a-zA-Z0-9]+)*[a-zA-Z0-9]+\\.[a-zA-Z0-9]+\"";
 	regcomp(&reg, pattern, cflags);
-
+	// printf("%s\n", html);
 	int i = 0;
     int length = strlen(html);
     while(i < length){
@@ -262,6 +262,7 @@ void send_resource_request_and_read_result(int sock, const char* server_port, co
 		requests[i]->sock = sock_i;
 		pthread_create(&tid, NULL, handle_subrequest, requests[i]);
 	}
+	sleep(1);
 	pthread_join(tid, NULL);
 #endif
 #ifndef MULTSOCK

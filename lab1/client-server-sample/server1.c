@@ -28,7 +28,7 @@ typedef struct{
 client_t *clients[MAX];
 
 int read_line(int fd,char *buf, int size){
-	//return the current idx 
+	//return the current idx, never called now, may need add \0
 	int i = 0;
 	char ch;
 	for(i = 0;i < size;++i){
@@ -337,13 +337,16 @@ int check_syntax_error(char* request){
             strncpy(out, request + i + pmatch.rm_so, pmatch.rm_eo - pmatch.rm_so);
             out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
             i += pmatch.rm_eo;
-	    	printf("%s\n", out);
+	    	// printf("%s\n", out);
 			
             if (strcmp(out, "Host") && strcmp(out, "Connection") &&
 				strcmp(out, "Upgrade-Insecure-Requests") && 
 				strcmp(out, "User-Agent") && strcmp(out, "Accept") && 
 				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language") &&
-				strcmp(out, "Cache-Control") && strcmp(out, "Referer")){
+				strcmp(out, "Cache-Control") && strcmp(out, "Referer") && strcmp(out, "Authorization") &&
+				strcmp(out, "Expect") && strcmp(out, "From") && strcmp(out, "If-Match") &&
+				strcmp(out, "If-Modified-Since") && strcmp(out, "If-None-Match") && strcmp(out, "If-Range") &&
+				strcmp(out, "If-Unmodified-Since") && strcmp(out, "Max-Forwards") && strcmp(out, "Proxy-Authorization")){
 				return 1;
 			}
 	    }

@@ -87,6 +87,7 @@ int html_source_parser(const char* html){
 	// printf("%s\n", html);
 	int i = 0;
     int length = strlen(html);
+	// printf("%s\n", html);
     while(i < length){
         status = regexec(&reg, html + i, nmatch, &pm, 0);
         if(status == REG_NOMATCH)
@@ -262,8 +263,8 @@ void send_resource_request_and_read_result(int sock, const char* server_port, co
 		requests[i]->sock = sock_i;
 		pthread_create(&tid, NULL, handle_subrequest, requests[i]);
 	}
-	sleep(1);
-	pthread_join(tid, NULL);
+	if(requests[0])
+		pthread_join(tid, NULL);
 #endif
 #ifndef MULTSOCK
 	sleep(1);

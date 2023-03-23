@@ -52,6 +52,7 @@ int recv_per_get(int fd, char *buf){
 		if(line_len <= 2)
 			break;
 	}
+	buf[i] = '\0';
 	return i;
 }
 
@@ -277,12 +278,17 @@ int send_html(int fd, char* path){
 int send_404(int fd){
 
     char* response_buf = (char *)malloc(1024);
-      
+#ifndef HTTP2    
     int response_len = sprintf(response_buf,
 						"HTTP/1.1 404 Not Found\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>404 Not Found</h1>"
 						"<p>The requested URL was not found on this server.</p></body></html>");
-
+#else 
+	int response_len = sprintf(response_buf,
+						"HTTP/2.0 404 Not Found\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>404 Not Found</h1>"
+						"<p>The requested URL was not found on this server.</p></body></html>");
+#endif
     send(fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
@@ -292,11 +298,17 @@ int send_400(int fd){
 
     char* response_buf = (char *)malloc(1024);
       
+#ifndef HTTP2  
     int response_len = sprintf(response_buf,
 						"HTTP/1.1 400 Bad Request\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>400 Bad Request</h1>"
 						"<p>Please check the syntax of your request.</p></body></html>");
-
+#else
+	int response_len = sprintf(response_buf,
+						"HTTP/2.0 400 Bad Request\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>400 Bad Request</h1>"
+						"<p>Please check the syntax of your request.</p></body></html>");
+#endif
     send(fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
@@ -305,12 +317,17 @@ int send_400(int fd){
 int send_505(int fd){
 
     char* response_buf = (char *)malloc(1024);
-      
+#ifndef HTTP2  
     int response_len = sprintf(response_buf,
 						"HTTP/1.1 505 HTTP Version Not Supported\r\n\r\n"
 						"<!DOCTYPE html><html><body><h1>505 HTTP Version Not Supported</h1>"
 						"<p>Incorrect http version was given.</p></body></html>");
-
+#else
+	int response_len = sprintf(response_buf,
+						"HTTP/2.0 505 HTTP Version Not Supported\r\n\r\n"
+						"<!DOCTYPE html><html><body><h1>505 HTTP Version Not Supported</h1>"
+						"<p>Incorrect http version was given.</p></body></html>");
+#endif
     send(fd, response_buf, response_len, 0);
     free(response_buf);
     return 0;
@@ -336,12 +353,13 @@ int check_syntax_error(char* request){
             strncpy(out, request + i + pmatch.rm_so, pmatch.rm_eo - pmatch.rm_so);
             out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
             i += pmatch.rm_eo;
-	    	printf("%s\n", out);
+	    	// printf("%s\n", out);
 			
             if (strcmp(out, "Host") && strcmp(out, "Connection") &&
 				strcmp(out, "Upgrade-Insecure-Requests") && 
 				strcmp(out, "User-Agent") && strcmp(out, "Accept") && 
-				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language")){
+				strcmp(out, "Accept-Encoding") && strcmp(out, "Accept-Language") &&
+				strcmp(out, "Cache-Control") && strcmp(out, "Referer")){
 				return 1;
 			}
 	    }
@@ -357,21 +375,28 @@ int check_version_error(char* request){
 	regmatch_t pmatch;
 	const size_t nmatch = 1;
 	regex_t reg, end_reg;
-	const char *pattern = "HTTP/[0-9]\\.[0-9]*:";
+	const char *pattern = "HTTP/[0-9]\\.[0-9]*";
 	regcomp(&reg, pattern, cflags);
 
-	status = regexec(&reg, request, nmatch, &pmatch, 0);
+	char head[50] = {0};
+	copy_line(request, head);
+	status = regexec(&reg, head, nmatch, &pmatch, 0);
     if(status == REG_NOMATCH)
 	    return 1;
 	else if (status == 0){
         char out[10] = {0};
-        strncpy(out, request + pmatch.rm_eo - 3, 3);
-        out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
-		printf("%s\n", out);
-		
+        strncpy(out, head + pmatch.rm_eo - 3, 3);
+        out[3] = '\0';
+		// printf("%s\n", out);
+#ifndef HTTP2		
         if (strcmp(out, "1.1")){
 			return 1;
 		}
+#else
+		if (strcmp(out, "2.0")){
+			return 1;
+		}
+#endif
 	}
 	regfree(&reg);
 	return 0;
@@ -438,7 +463,7 @@ void *handle_connection(client_t *cli){
 	
 	while(1){
 		read_len = recv_per_get(cli->fd, cli_msg);
-		cli_msg[read_len] = '\0';
+		// cli_msg[read_len] = '\0';
 		if(read_len <= 0){
 			printf("close-client:%s,%s\n", addr_buf, port_buf);
 			break;

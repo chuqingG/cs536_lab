@@ -338,7 +338,7 @@ int check_syntax_error(char* request){
             out[pmatch.rm_eo - pmatch.rm_so - 1] = '\0';
             i += pmatch.rm_eo;
 	    	// printf("%s\n", out);
-			
+			//TODO: wrong here, need to follow RFC standard
             if (strcmp(out, "Host") && strcmp(out, "Connection") &&
 				strcmp(out, "Upgrade-Insecure-Requests") && 
 				strcmp(out, "User-Agent") && strcmp(out, "Accept") && 

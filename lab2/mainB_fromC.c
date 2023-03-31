@@ -490,17 +490,12 @@ void launch_routing(int slot, int** updated){
         for(int j = 0; j < num_nodes; j++)
             updated[i][j] = 0;
     }
-    for(int i = 0; i < num_nodes; i++){
-        for(int j = 0; j < num_nodes; j++)
-            if(link_costs[i][j] > 0)
-                link_costs[i][j] = 0;
-    }
     printf("k=%d:\n", slot);
     // print_dt(&dts[3], 3);
     for(int i = 0; i < num_traf; i++){
         printf("%d %d %d ", traf_list[i].src, traf_list[i].des, traf_list[i].load);
         if(print_path(traf_list[i].src, traf_list[i].des)){
-            update_path_cost(traf_list[i].src, traf_list[i].des, traf_list[i].load, updated);
+            // update_path_cost(traf_list[i].src, traf_list[i].des, traf_list[i].load, updated);
         }
     }
     

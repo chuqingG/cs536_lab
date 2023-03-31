@@ -385,16 +385,25 @@ bool check_connection(int src, int des){
         return false;
 }
 
+
 void print_path(int src, int des){
     if(!check_connection(src, des)){
         printf("null\n");
         return;
     }
     int cur = src;
+    int visited[num_nodes];
+    for(int i = 0; i < num_nodes; i++)
+        visited[i] = 0;
     printf("%d", src);
     while(cur != des){
         cur = path_mem[cur][des];
         printf(">%d", cur);
+        if(visited[cur]){
+            printf("(drop)");
+            break;
+        }
+        visited[cur] = 1;
     }
     printf("\n");
 }

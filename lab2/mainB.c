@@ -372,7 +372,24 @@ void get_traffic(char *path, struct traffic* traf_list, int n){
     }
 }
 
+bool check_connection(int src, int des){
+    int cur = src;
+    while(cur != des){
+        cur = path_mem[cur][des];
+        if(cur < 0) // not connected
+            break;
+    }
+    if(cur == des)
+        return true;
+    else    
+        return false;
+}
+
 void print_path(int src, int des){
+    if(!check_connection(src, des)){
+        printf("null\n");
+        return;
+    }
     int cur = src;
     printf("%d", src);
     while(cur != des){

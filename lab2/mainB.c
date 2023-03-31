@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define MYDEBUG
+// #define MYDEBUG
 
 /* a rtpkt is the packet sent from one router to
    another*/
@@ -41,8 +41,9 @@ struct distance_table *dts;
 struct traffic *traf_list;
 
 int **link_costs; /*This is a 2D matrix stroing the content defined in topo file*/
+int **path_mem; /* path[i][j]: the first step when i->j */
 int num_nodes;
-
+int num_traf;
 
 /* possible events: */
 /*Note in this lab, we only have one event, namely FROM_LAYER2.It refer to that the packet will pop out from layer3, you can add more event to emulate other activity for other layers. Like FROM_LAYER3*/
@@ -55,156 +56,6 @@ float clocktime = 0.000;
 /********************* EVENT HANDLINE ROUTINES *******/
 /*  The next set of routines handle the event list   */
 /*****************************************************/
-int min_(int x, int y){
-    if(x < y && x >= 0)
-        return x;
-    else
-        return y;
-}
-
-bool check_update(int x, int y){
-    if(x <= y && x >= 0)
-        return false;
-    else
-        return true;
-}
-
-void rtinit(struct distance_table *dt, int node, int *link_costs, int num_nodes){
-    /* Todo: Please write the code here*/
-    // allocate space
-    dt->costs = (int **) malloc(num_nodes * sizeof(int *));
-    for (int i = 0; i < num_nodes; i++){
-        dt->costs[i] = (int *)malloc(num_nodes * sizeof(int));
-    }
-    // Initialize the values
-    for(int i = 0; i < num_nodes; i++){
-        for(int j = 0; j < num_nodes; j++)
-            dt->costs[i][j] = -1;
-    }
-    for(int i = 0; i < num_nodes; i++){
-        dt->costs[node][i] = link_costs[i];
-    }
-#ifdef MYDEBUG
-    // print_dt(dt, node);
-#endif
-    for(int i = 0; i < num_nodes; i++){
-        if(link_costs[i] > 0){
-            struct rtpkt* send_pkt = (struct rtpkt*)malloc(sizeof(struct rtpkt));
-            send_pkt->sourceid = node;
-            // send_pkt->destid = -1; //flag
-            send_pkt->destid = i;
-            send_pkt->mincost = dt->costs[node];
-            // printf("%d->%d\n", send_pkt->sourceid, send_pkt->destid);
-            send2neighbor(send_pkt);
-        }
-    }
-}
-
-void rtupdate(struct distance_table *dt, struct rtpkt recv_pkt){
-    /* Todo: Please write the code here*/
-    int src = recv_pkt.sourceid;
-    int cur = recv_pkt.destid;
-    // printf("I'm node %d:\n", cur);
-    bool update_flag = false;
-    for(int i = 0; i < num_nodes; i++){
-        // printf("Update cost to node %d: lc(%d, %d)=%d, get new c(%d, %d)=%d\n", i, cur, src,link_costs[src][cur],
-        //                                 src, i, recv_pkt.mincost[i]);
-        if(recv_pkt.mincost[i] > 0)
-            if(check_update(dt->costs[cur][i],
-                            link_costs[src][cur] + recv_pkt.mincost[i])){
-                update_flag = true;
-                // printf("update(%d, %d): %d->%d\n", cur, i, dt->costs[cur][i], link_costs[src][cur] + recv_pkt.mincost[i]);
-                dt->costs[cur][i] = link_costs[src][cur] + recv_pkt.mincost[i];
-            }
-    }
-    if(update_flag){
-        // printf("[node %d update dv]\n", cur);
-        for(int i = 0; i < num_nodes; i++){
-            if(link_costs[cur][i] > 0){
-                struct rtpkt* send_pkt = (struct rtpkt*)malloc(sizeof(struct rtpkt));
-                send_pkt->sourceid = cur;
-                // send_pkt->destid = -1; //flag
-                send_pkt->destid = i;
-                send_pkt->mincost = dt->costs[cur];
-                // printf("%d->%d\n", send_pkt->sourceid, send_pkt->destid);
-                send2neighbor(send_pkt);
-                // exit(0);
-            }
-        }
-    }
-}
-
-
-/* jimsrand(): return a float in range [0,1].  The routine below is used to */
-/* isolate all random number generation in one location.  We assume that the*/
-/* system-supplied rand() function return an int in therange [0,mmm]        */
-float jimsrand() {
-    double mmm = 2147483647;   
-    float x;                   
-    x = rand()/mmm;            
-    return(x);
-}  
-
-
-/**************   Some printers *******************/
-void print_dt(struct distance_table *dt, int node){
-    printf("===node %d===\n", node);
-    for(int i = 0; i < num_nodes; i++){
-        for(int j = 0; j < num_nodes; j++)
-            printf("%d ", dt->costs[i][j]);
-        printf("\n");
-    }
-}
-
-
-void printevent(){
-    struct event *q, *qold;
-    q = evlist;
-    while(q!=NULL){
-        if(q->evtype == FROM_LAYER2)
-            printf("time %.4f: %d -> %d \n", q->evtime, q->rtpktptr->sourceid,
-                                    q->rtpktptr->destid);
-        else    
-            printf("---SLOT finished---\n");
-        q = q->next;
-    }
-}
-
-void printevlist(){
-    struct event *q;
-    printf("--------------\nEvent List Follows:\n");
-    for(q = evlist; q!=NULL; q=q->next) {
-        if(q->evtype == FROM_LAYER2)
-            printf("Event time: %f, type: %d entity: %d\n",q->evtime,q->evtype,q->eventity);
-        else    
-            printf("SLOT finished\n");
-    }
-    printf("--------------\n");
-}
-
-void print_all_dv(int slot){
-    printf("k=%d:\n", slot);
-    for(int i = 0; i < num_nodes; i++){
-        printf("node-%d:", i);
-        for(int j = 0; j < num_nodes; j++){
-            printf(" %d", dts[i].costs[i][j]);
-        }
-        printf("\n");
-    }
-}
-
-void insert_slot_barrier(){
-    struct event *eptr, *q;
-    eptr = (struct event *)malloc(sizeof(struct event));
-    eptr->evtype = SLOT_END;
-    float lastime = clocktime;
-    for (q=evlist; q!=NULL; q = q->next) 
-        lastime = q->evtime;
-    eptr->evtime = lastime + 0.00001;
-    insertevent(eptr);
-}
-
-
 void insertevent(struct event *p)
 {
     struct event *q,*qold;
@@ -291,19 +142,175 @@ void send2neighbor(struct rtpkt *packet){
     insertevent(evptr);
 } 
 
-void get_num_nodes(char* path){
+int min_(int x, int y){
+    if(x < y && x >= 0)
+        return x;
+    else
+        return y;
+}
+
+bool check_update(int x, int y){
+    if(x <= y && x >= 0)
+        return false;
+    else
+        return true;
+}
+
+void rtinit(struct distance_table *dt, int node, int *link_costs, int *path_next, int num_nodes){
+    // allocate space
+    dt->costs = (int **) malloc(num_nodes * sizeof(int *));
+    for (int i = 0; i < num_nodes; i++){
+        dt->costs[i] = (int *)malloc(num_nodes * sizeof(int));
+    }
+    // Initialize the values
+    for(int i = 0; i < num_nodes; i++){
+        for(int j = 0; j < num_nodes; j++)
+            dt->costs[i][j] = -1;
+    }
+    for(int i = 0; i < num_nodes; i++){
+        dt->costs[node][i] = link_costs[i];
+    }
+    // Initialize the path
+    for(int i = 0; i < num_nodes; i++){
+        if(link_costs[i] >= 0)
+            path_next[i] = i;
+        else
+            path_next[i] = -1;
+    }
+
+#ifdef MYDEBUG
+    // print_dt(dt, node);
+#endif
+
+    for(int i = 0; i < num_nodes; i++){
+        if(link_costs[i] > 0){
+            struct rtpkt* send_pkt = (struct rtpkt*)malloc(sizeof(struct rtpkt));
+            send_pkt->sourceid = node;
+            send_pkt->destid = i;
+            send_pkt->mincost = dt->costs[node];
+            // printf("%d->%d\n", send_pkt->sourceid, send_pkt->destid);
+            send2neighbor(send_pkt);
+        }
+    }
+}
+
+void rtupdate(struct distance_table *dt, struct rtpkt recv_pkt){
+    /* Todo: Please write the code here*/
+    int src = recv_pkt.sourceid;
+    int cur = recv_pkt.destid;
+    // printf("I'm node %d:\n", cur);
+    bool update_flag = false;
+    for(int i = 0; i < num_nodes; i++){
+        // printf("Update cost to node %d: lc(%d, %d)=%d, get new c(%d, %d)=%d\n", i, cur, src,link_costs[src][cur],
+        //                                 src, i, recv_pkt.mincost[i]);
+        if(recv_pkt.mincost[i] > 0)
+            if(check_update(dt->costs[cur][i],
+                            link_costs[src][cur] + recv_pkt.mincost[i])){
+                update_flag = true;
+                path_mem[cur][i] = src;
+                // printf("update(%d, %d): %d->%d\n", cur, i, dt->costs[cur][i], link_costs[src][cur] + recv_pkt.mincost[i]);
+                dt->costs[cur][i] = link_costs[src][cur] + recv_pkt.mincost[i];
+            }
+    }
+    if(update_flag){
+        // printf("[node %d update dv]\n", cur);
+        for(int i = 0; i < num_nodes; i++){
+            if(link_costs[cur][i] > 0){
+                struct rtpkt* send_pkt = (struct rtpkt*)malloc(sizeof(struct rtpkt));
+                send_pkt->sourceid = cur;
+                // send_pkt->destid = -1; //flag
+                send_pkt->destid = i;
+                send_pkt->mincost = dt->costs[cur];
+                // printf("%d->%d\n", send_pkt->sourceid, send_pkt->destid);
+                send2neighbor(send_pkt);
+                // exit(0);
+            }
+        }
+    }
+}
+
+
+/* jimsrand(): return a float in range [0,1].  The routine below is used to */
+/* isolate all random number generation in one location.  We assume that the*/
+/* system-supplied rand() function return an int in therange [0,mmm]        */
+float jimsrand() {
+    double mmm = 2147483647;   
+    float x;                   
+    x = rand()/mmm;            
+    return(x);
+}  
+
+
+/**************   Some printers *******************/
+void print_dt(struct distance_table *dt, int node){
+    printf("===node %d===\n", node);
+    for(int i = 0; i < num_nodes; i++){
+        for(int j = 0; j < num_nodes; j++)
+            printf("%d ", dt->costs[i][j]);
+        printf("\n");
+    }
+}
+
+
+void printevent(){
+    struct event *q, *qold;
+    q = evlist;
+    while(q!=NULL){
+        if(q->evtype == FROM_LAYER2)
+            printf("time %.4f: %d -> %d \n", q->evtime, q->rtpktptr->sourceid,
+                                    q->rtpktptr->destid);
+        else    
+            printf("---SLOT finished---\n");
+        q = q->next;
+    }
+}
+
+void print_traffic(){
+    printf("--------------\n");
+    for(int i = 0; i < num_traf; i++)
+        printf("%d->%d: %d\n", traf_list[i].src, traf_list[i].des, traf_list[i].load);
+    printf("--------------\n");
+}
+
+void print_all_dv(int slot){
+    printf("k=%d:\n", slot);
+    for(int i = 0; i < num_nodes; i++){
+        printf("node-%d:", i);
+        for(int j = 0; j < num_nodes; j++){
+            printf(" %d", dts[i].costs[i][j]);
+        }
+        printf("\n");
+    }
+}
+
+void insert_slot_barrier(){
+    struct event *eptr, *q;
+    eptr = (struct event *)malloc(sizeof(struct event));
+    eptr->evtype = SLOT_END;
+    float lastime = clocktime;
+    for (q=evlist; q!=NULL; q = q->next) 
+        lastime = q->evtime;
+    eptr->evtime = lastime + 0.00001;
+    insertevent(eptr);
+}
+
+
+int get_line_number(char* path){
     int read_len = 0;
     size_t buf_len = 0;
     char* buf = NULL;
+    int line_num = 0;
     FILE *fp = fopen(path, "r");
     if (fp == NULL)
         perror("open file");
     while((read_len = getline(&buf, &buf_len, fp)) != -1){
-        num_nodes++;
+        line_num++;
     }
     if(buf)
         free(buf);
+    return line_num;
 }
+
 
 void get_link_cost(char* path, int** link_costs, int n){
     /* Initialize link_cost with the topology file*/
@@ -347,11 +354,41 @@ void get_link_cost(char* path, int** link_costs, int n){
     }
 }
 
-void get_traffic(char *path, int n){
+void get_traffic(char *path, struct traffic* traf_list, int n){
+     int read_len = 0;
+    size_t buf_len = 0;
+    char* buf = NULL;
+    FILE *fp = fopen(path, "r");
+    if (fp == NULL)
+        perror("open file");
 
+    for(int i = 0; i < n; i++){
+        // ith line
+        if((read_len = getline(&buf, &buf_len, fp)) == -1)
+            perror("getline");
+        int num = sscanf(buf, "%d %d %d", &(traf_list[i].src), &(traf_list[i].des), &(traf_list[i].load));
+        if(num != 3)
+            perror("sscanf");
+    }
 }
 
+void print_path(int src, int des){
+    int cur = src;
+    printf("%d", src);
+    while(cur != des){
+        cur = path_mem[cur][des];
+        printf(">%d", cur);
+    }
+    printf("\n");
+}
 
+void launch_routing(int slot){
+    printf("k=%d:\n", slot);
+    for(int i = 0; i < num_traf; i++){
+        printf("%d %d %d ", traf_list[i].src, traf_list[i].des, traf_list[i].load);
+        print_path(traf_list[i].src, traf_list[i].des);
+    }
+}
 
 void main(int argc, char *argv[])
 {
@@ -362,21 +399,28 @@ void main(int argc, char *argv[])
     int k_max = 0;
     int cur_slot = 0;
     k_max = atoi(argv[1]);
-    get_num_nodes(argv[2]);
-    
+    num_nodes = get_line_number(argv[2]);
+    num_traf = get_line_number(argv[3]);
+
     dts = (struct distance_table *) malloc(num_nodes * sizeof(struct distance_table));
     link_costs = (int **) malloc(num_nodes * sizeof(int *));
+    path_mem = (int **)malloc(num_nodes * sizeof(int *));
     for (int i = 0; i < num_nodes; i++){
         link_costs[i] = (int *)malloc(num_nodes * sizeof(int));
+        path_mem[i] = (int *)malloc(num_nodes * sizeof(int));
     }
     get_link_cost(argv[2], link_costs, num_nodes);
 
+    traf_list = (struct traffic *)malloc(num_traf * sizeof(struct traffic));
+    get_traffic(argv[3], traf_list, num_traf);
+    // print_traffic();
+
+
     /*********** k=0 ********/
     for (int i = 0; i < num_nodes; i++){
-        rtinit(&dts[i], i, link_costs[i], num_nodes);
+        rtinit(&dts[i], i, link_costs[i], path_mem[i], num_nodes);
     }
     insert_slot_barrier();
-    print_all_dv(0);
 
 
     while (1) {
@@ -394,12 +438,13 @@ void main(int argc, char *argv[])
         else if(eventptr->evtype == SLOT_END){
             /* End of a slot*/
             cur_slot += 1;
-            if(cur_slot <= 4 || cur_slot % 10 == 0)
-                print_all_dv(cur_slot);
+            launch_routing(cur_slot);
+            // if(cur_slot <= 4 || cur_slot % 10 == 0)
+            //     print_all_dv(cur_slot);
             // printevent();
             insert_slot_barrier();
             if(cur_slot >= k_max){
-                goto terminate;
+                goto finished;
             }
         } else {
             printf("Panic: unknown event type\n"); 
@@ -413,6 +458,14 @@ void main(int argc, char *argv[])
 
 terminate:
     printf("\nSimulator terminated at t=%f, no packets in medium\n", clocktime);
+    return;
+
+finished:
+#ifdef MYDEBUG
+    printf("\nSimulator terminated at t=%f\n", clocktime);
+#endif
+    return;
+
 }
 
 

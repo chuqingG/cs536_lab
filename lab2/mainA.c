@@ -369,7 +369,7 @@ void main(int argc, char *argv[])
             // printevent();
             insert_slot_barrier();
             if(cur_slot >= k_max){
-                goto terminate;
+                goto finished;
             }
         } else {
             printf("Panic: unknown event type\n"); 
@@ -383,6 +383,13 @@ void main(int argc, char *argv[])
 
 terminate:
     printf("\nSimulator terminated at t=%f, no packets in medium\n", clocktime);
+    return;
+
+finished:
+#ifdef MYDEBUG
+    printf("\nSimulator terminated at t=%f\n", clocktime);
+#endif
+    return;
 }
 
 

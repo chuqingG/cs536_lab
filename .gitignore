@@ -10,4 +10,6 @@ lab1/client-server-sample/http*
 lab1/client-server-sample/demo*
 lab1/client-server-sample/www/
 lab2/mainA
+lab2/mainB
 lab2/test*
+.vscode/

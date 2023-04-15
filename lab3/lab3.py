@@ -32,10 +32,16 @@ def caseB(pcap, website):
                 ip_addr = dns.an.rdata
                 break
     print("IPAddr-DEST:", ip_addr)
-    return ip_addr
     
 
-def caseC(pcap, ip_des):
+def caseC(pcap, website):
+    ip_des = ""
+    for pkg in pcap:
+        if "DNS" in pkg.payload and pkg["DNS"].qr == 1:
+            dns = pkg["DNS"]
+            if dns.an != None and website in repr(dns):
+                ip_des = dns.an.rdata
+                break
     print("CASE C:")
     cnt = 0
     for pkg in pcap:
@@ -65,8 +71,29 @@ def caseC(pcap, ip_des):
                     
     
 if __name__ == '__main__':
-    website = "www.google.com"
-    pcap = sniff(offline="lab3_2.pcap")
-    caseA(pcap)
-    ip_b = caseB(pcap, website)
-    caseC(pcap, ip_b)
+    path = ""
+    website = ""
+    case = ""
+    argc = len(sys.argv)
+    if argc == 3:
+        path = sys.argv[1]
+        website = sys.argv[2]
+    elif argc == 4:
+        case = sys.argv[1]
+        path = sys.argv[2]
+        website = sys.argv[3]
+    else:
+        print("invalid arguments")
+        exit(0)
+    if case == "" or case == "ALL":
+        case = "ABC"
+
+    pcap = sniff(offline=path)
+    if "A" in case:
+        caseA(pcap)
+    if "B" in case:
+        caseB(pcap, website)
+    if "C" in case:
+        caseC(pcap, website)
+    # ip_b = caseB(pcap, website)
+    # caseC(pcap, ip_b)
